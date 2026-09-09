@@ -138,10 +138,10 @@
         }
         #grid-bg {
             position: absolute;
-            top: -5000px;
-            left: -5000px;
-            width: 10000px;
-            height: 10000px;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
             background-image: radial-gradient(var(--dot-color) 1px, transparent 1px);
             background-size: 20px 20px;
             pointer-events: auto;
@@ -1152,15 +1152,15 @@
             <div class="tool-btn" style="background:#f59e0b;" onmousedown="startGhostDrag(event,'OUTPUT')" ontouchstart="startGhostDrag(event,'OUTPUT')">Output</div>
         </div>
         <div class="toolbar-group">
-            <div class="tool-btn" onmousedown="startGhostDrag(event,'AND')" ontouchstart="startGhostDrag(event,'AND')">AND</div>
-            <div class="tool-btn" onmousedown="startGhostDrag(event,'OR')" ontouchstart="startGhostDrag(event,'OR')">OR</div>
-            <div class="tool-btn" onmousedown="startGhostDrag(event,'XOR')" ontouchstart="startGhostDrag(event,'XOR')">XOR</div>
-            <div class="tool-btn" onmousedown="startGhostDrag(event,'NOT')" ontouchstart="startGhostDrag(event,'NOT')">NOT</div>
-            <div class="tool-btn" onmousedown="startGhostDrag(event,'NAND')" ontouchstart="startGhostDrag(event,'NAND')">NAND</div>
-            <div class="tool-btn" onmousedown="startGhostDrag(event,'NOR')" ontouchstart="startGhostDrag(event,'NOR')">NOR</div>
-            <div class="tool-btn" onmousedown="startGhostDrag(event,'XNOR')" ontouchstart="startGhostDrag(event,'XNOR')">XNOR</div>
-            <div class="tool-btn" onmousedown="startGhostDrag(event,'DELAY')" ontouchstart="startGhostDrag(event,'DELAY')">DELAY</div>
-            <div class="tool-btn" style="background:#0d9488;" onmousedown="startGhostDrag(event,'CLOCK')" ontouchstart="startGhostDrag(event,'CLOCK')">CLOCK</div>
+            <div class="tool-btn" style="background:#16a34a;" onmousedown="startGhostDrag(event,'AND')" ontouchstart="startGhostDrag(event,'AND')" oncontextmenu="expandToolbarGate(event, 'AND'); return false;">AND</div>
+            <div class="tool-btn" style="background:#8b5cf6;" onmousedown="startGhostDrag(event,'OR')" ontouchstart="startGhostDrag(event,'OR')" oncontextmenu="expandToolbarGate(event, 'OR'); return false;">OR</div>
+            <div class="tool-btn" style="background:#ec4899;" onmousedown="startGhostDrag(event,'XOR')" ontouchstart="startGhostDrag(event,'XOR')" oncontextmenu="expandToolbarGate(event, 'XOR'); return false;">XOR</div>
+            <div class="tool-btn" style="background:#ef4444;" onmousedown="startGhostDrag(event,'NOT')" ontouchstart="startGhostDrag(event,'NOT')" oncontextmenu="expandToolbarGate(event, 'NOT'); return false;">NOT</div>
+            <div class="tool-btn" style="background:#0f766e;" onmousedown="startGhostDrag(event,'NAND')" ontouchstart="startGhostDrag(event,'NAND')" oncontextmenu="expandToolbarGate(event, 'NAND'); return false;">NAND</div>
+            <div class="tool-btn" style="background:#7c3aed;" onmousedown="startGhostDrag(event,'NOR')" ontouchstart="startGhostDrag(event,'NOR')" oncontextmenu="expandToolbarGate(event, 'NOR'); return false;">NOR</div>
+            <div class="tool-btn" style="background:#0891b2;" onmousedown="startGhostDrag(event,'XNOR')" ontouchstart="startGhostDrag(event,'XNOR')" oncontextmenu="expandToolbarGate(event, 'XNOR'); return false;">XNOR</div>
+            <div class="tool-btn" style="background:#64748b;" onmousedown="startGhostDrag(event,'DELAY')" ontouchstart="startGhostDrag(event,'DELAY')" oncontextmenu="expandToolbarGate(event, 'DELAY'); return false;">DELAY</div>
+            <div class="tool-btn" style="background:#0d9488;" onmousedown="startGhostDrag(event,'CLOCK')" ontouchstart="startGhostDrag(event,'CLOCK')" oncontextmenu="expandToolbarGate(event, 'CLOCK'); return false;">CLOCK</div>
         </div>
         <div class="toolbar-group" style="border-left:2px solid var(--border-color);padding-left:5px;">
             <div class="tool-btn" style="background:#d97706;" onmousedown="startGhostDrag(event,'SCREEN')" ontouchstart="startGhostDrag(event,'SCREEN')">Pixel</div>
@@ -1567,7 +1567,7 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `logic_circuit_${new Date().toISOString().slice(0, 10)}.json`;
+            a.download = `logic_gate_simulator_${new Date().toISOString().slice(0, 10)}.json`;
             a.click();
             URL.revokeObjectURL(url);
             showToast('Circuit exported!', 'success');
@@ -2958,10 +2958,10 @@
             }
             let titleSpan = `<span>${comp.type === 'INPUT' ? 'Toggle' : comp.type === 'PUSH' ? 'Push' : comp.type}</span>`;
             if (comp.isCustom) {
-                titleSpan = `<span>${comp.type} <span class="expand-hint">⤵ expand</span></span>`;
+                titleSpan = `<span>${comp.type}</span>`;
             }
             el.innerHTML = `
-                <div class="gate-header" onmousedown="startDragGate(event,${comp.id})" ontouchstart="startDragGate(event,${comp.id})" ${comp.isCustom ? 'ondblclick="expandCustomGate('+comp.id+')"' : ''}>
+                <div class="gate-header" onmousedown="startDragGate(event,${comp.id})" ontouchstart="startDragGate(event,${comp.id})">
                     ${titleSpan}
                     ${headerRight}
                 </div>
@@ -4271,6 +4271,141 @@
             drawWires();
             forceSaveState();
             openICManager();
+        }
+
+        // ─── expand toolbar gate on right-click ─────────────────────
+        function expandToolbarGate(e, gateType) {
+            e.preventDefault();
+
+            // Check if it's a custom gate
+            if (savedCustomGates[gateType]) {
+                // Open expanded version in a small window for editing
+                const def = savedCustomGates[gateType];
+
+                // Create a temporary container to hold the gate for editing
+                const contId = nextId++;
+                const container = {
+                    id: contId,
+                    x: 100,
+                    y: 100,
+                    width: 300,
+                    height: 200,
+                    title: `${gateType} (Editing)`,
+                    color: def.color || '#6f42c1',
+                    _expandedFrom: gateType,
+                    _savedGate: JSON.parse(JSON.stringify({
+                        id: contId,
+                        type: gateType,
+                        isCustom: true,
+                        def: def,
+                        inputs: new Array(def.inputsCount).fill(0),
+                        outputVal: 0,
+                        outputsArray: new Array(def.outputsCount).fill(0),
+                        subComps: JSON.parse(JSON.stringify(def.innerComps)),
+                        subWires: def.innerWires.slice(),
+                        delayStates: {},
+                        clockStates: {}
+                    })),
+                    _externalWires: [],
+                    _subCompPositions: {},
+                    _innerCompIds: [],
+                    _innerWires: [],
+                    _pushedAside: []
+                };
+
+                // Initialize the saved gate's subcomponents with proper state
+                if (container._savedGate.subComps) {
+                    container._savedGate.subComps.forEach(sc => {
+                        if (sc.isCustom && sc.type && savedCustomGates[sc.type]) {
+                            sc.def = savedCustomGates[sc.type];
+                        }
+                        if (sc.type === 'DELAY') {
+                            const val = sc.delayVal || 3;
+                            sc.delayQueue = new Array(val).fill(0);
+                            if (!container._savedGate.delayStates) container._savedGate.delayStates = {};
+                            container._savedGate.delayStates[sc.id] = { queue: new Array(val).fill(0), ptr: 0 };
+                        }
+                        if (sc.type === 'CLOCK') {
+                            const val = sc.clockVal || 5;
+                            sc.clockVal = val;
+                            if (!container._savedGate.clockStates) container._savedGate.clockStates = {};
+                            container._savedGate.clockStates[sc.id] = { counter: 0, state: 0, period: val };
+                            sc.outputVal = 0;
+                        }
+                        if (sc.type === 'SCREEN') {
+                            sc.pixelWidth = sc.pixelWidth || 40;
+                            sc.pixelHeight = sc.pixelHeight || 40;
+                        }
+                        if (sc.type === 'COLOR') {
+                            sc.pixelColor = sc.pixelColor || '#39ff14';
+                        }
+                    });
+                }
+
+                customContainers.push(container);
+                renderCustomContainer(container);
+
+                // Add the internal components
+                const idMap = {};
+                if (container._savedGate.subComps) {
+                    container._savedGate.subComps.forEach(sc => {
+                        const newId = nextId++;
+                        idMap[sc.id] = newId;
+                        container._innerCompIds.push(newId);
+
+                        const newSc = JSON.parse(JSON.stringify(sc));
+                        newSc.id = newId;
+                        newSc.x = 120 + (sc.x || 0);
+                        newSc.y = 120 + (sc.y || 0);
+                        newSc.state = sc.state || 0;
+                        newSc.outputVal = sc.outputVal || 0;
+                        if (newSc.isCustom && newSc.type && savedCustomGates[newSc.type]) {
+                            newSc.def = savedCustomGates[newSc.type];
+                        }
+                        if (newSc.type === 'DELAY') {
+                            newSc.delayVal = sc.delayVal || 3;
+                            newSc.delayQueue = new Array(newSc.delayVal).fill(0);
+                        }
+                        if (newSc.type === 'CLOCK') {
+                            newSc.clockVal = sc.clockVal || 5;
+                            newSc.clockCounter = 0;
+                        }
+                        if (newSc.type === 'SCREEN') {
+                            newSc.pixelWidth = sc.pixelWidth || 40;
+                            newSc.pixelHeight = sc.pixelHeight || 40;
+                        }
+                        if (newSc.type === 'COLOR') {
+                            newSc.pixelColor = sc.pixelColor || '#39ff14';
+                        }
+
+                        components.push(newSc);
+                        renderComponent(newSc);
+                    });
+                }
+
+                // Add internal wires
+                if (container._savedGate.subWires) {
+                    container._savedGate.subWires.forEach(w => {
+                        const newWire = {
+                            fromComp: idMap[w.fromComp] || w.fromComp,
+                            fromPort: w.fromPort,
+                            toComp: idMap[w.toComp] || w.toComp,
+                            toPort: w.toPort
+                        };
+                        wires.push(newWire);
+                        container._innerWires.push(newWire);
+                    });
+                }
+
+                forceSaveState();
+                runSimulation();
+                drawWires();
+
+                showToast(`Expanded ${gateType} for editing. Close the container to save changes.`, 'info');
+            } else {
+                // For standard gates, just show info
+                showToast(`Standard gate ${gateType} - right-click to edit not available`, 'info');
+            }
         }
 
         // ─── gate drag ───────────────────────────────────────────────

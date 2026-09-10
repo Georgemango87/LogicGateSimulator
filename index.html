@@ -45,6 +45,8 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
 .delay-input{width:34px;background:rgba(0,0,0,.2);color:var(--text-color);border:1px solid var(--border-color);border-radius:3px;padding:1px 3px;font-size:10px;text-align:center;z-index:4;pointer-events:auto}
 .bulb{width:16px;height:16px;border-radius:50%;background:#ddd;border:2px solid #555;flex-shrink:0;transition:background .1s,box-shadow .1s}
 .bulb.on{background:#ffc107;box-shadow:0 0 10px #ffc107;border-color:#d39e00}
+.pulse-led{width:10px;height:10px;border-radius:50%;background:#3f3f46;border:2px solid #555;flex-shrink:0;transition:background .06s,box-shadow .06s}
+.pulse-led.on{background:#f43f5e;box-shadow:0 0 10px #f43f5e;border-color:#f43f5e}
 .color-picker-input{width:26px;height:20px;padding:1px;border:1px solid rgba(255,255,255,.4);border-radius:3px;background:transparent;cursor:pointer;z-index:4;pointer-events:auto;flex-shrink:0}
 .gate-pixel{border-radius:0!important;border:none!important;background:transparent!important;box-shadow:none!important;cursor:move;margin:0!important;padding:0!important;position:absolute;z-index:3;width:40px!important;height:40px!important;min-width:40px!important;min-height:40px!important}
 .gate-pixel .gate-body{padding:0!important;margin:0!important;background:transparent!important;display:flex;align-items:center;justify-content:center;border-radius:0!important;width:100%;height:100%;position:relative;border:none!important}
@@ -155,6 +157,7 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
         <div class="tool-btn" style="background:#0891b2;" onmousedown="startGhostDrag(event,'XNOR')" ontouchstart="startGhostDrag(event,'XNOR')">XNOR</div>
         <div class="tool-btn" style="background:#64748b;" onmousedown="startGhostDrag(event,'DELAY')" ontouchstart="startGhostDrag(event,'DELAY')">DELAY</div>
         <div class="tool-btn" style="background:#0d9488;" onmousedown="startGhostDrag(event,'CLOCK')" ontouchstart="startGhostDrag(event,'CLOCK')">CLOCK</div>
+        <div class="tool-btn" style="background:#f43f5e;" onmousedown="startGhostDrag(event,'PULSE')" ontouchstart="startGhostDrag(event,'PULSE')">PULSE</div>
     </div>
     <div class="toolbar-group" style="border-left:2px solid var(--border-color);padding-left:5px;">
         <div class="tool-btn" style="background:#d97706;" onmousedown="startGhostDrag(event,'SCREEN')" ontouchstart="startGhostDrag(event,'SCREEN')">Pixel</div>
@@ -290,6 +293,7 @@ let modalPortPositions={},modalPortPositionsDirty=true;
 let modalInitialized=false,modalEventListenersAttached=false;
 let isDraggingModalGate=false,activeModalComp=null;
 let modalGateGrabOffsetX=0,modalGateGrabOffsetY=0;
+let modalGroupDragStartPositions=null,modalGroupDragAnchorStartX=0,modalGroupDragAnchorStartY=0;
 let modalSelectedIds=new Set(),modalSelectedSourceIndex=0;
 let modalWirePouringState=null;
 let modalIsBoxSelecting=false;
@@ -304,7 +308,7 @@ let undoStack=[],redoStack=[];
 const MAX_HISTORY=100;let isUndoRedo=false,lastSaveTime=0;const SAVE_DEBOUNCE=50;
 
 /* colors */
-const GATE_COLORS={INPUT:'#2563eb',PUSH:'#6c5ce7',OUTPUT:'#f59e0b',AND:'#16a34a',OR:'#8b5cf6',XOR:'#ec4899',NOT:'#ef4444',NAND:'#0f766e',NOR:'#7c3aed',XNOR:'#0891b2',DELAY:'#64748b',CLOCK:'#0d9488',SCREEN:'#d97706',COLOR:'#db2777'};
+const GATE_COLORS={INPUT:'#2563eb',PUSH:'#6c5ce7',OUTPUT:'#f59e0b',AND:'#16a34a',OR:'#8b5cf6',XOR:'#ec4899',NOT:'#ef4444',NAND:'#0f766e',NOR:'#7c3aed',XNOR:'#0891b2',DELAY:'#64748b',CLOCK:'#0d9488',PULSE:'#f43f5e',SCREEN:'#d97706',COLOR:'#db2777'};
 function getGateColor(c){if(c.isCustom)return(c.def&&c.def.color)||'#6f42c1';return GATE_COLORS[c.type]||'#007bff'}
 function getGateColorByName(t,d){if(d&&d.color)return d.color;return GATE_COLORS[t]||'#6f42c1'}
 
@@ -313,22 +317,64 @@ const SNAP=20;
 function snapValue(v){if(!document.getElementById('snapCheck').checked)return v;return Math.round(v/SNAP)*SNAP}
 function snapPos(x,y){return{x:snapValue(x),y:snapValue(y)}}
 
+/* ─── timing core ─────────────────────────────────────────────
+   The simulation ticks every TICK_MS milliseconds.  All user-facing
+   timing values (DELAY, PULSE) are expressed in milliseconds and
+   converted to a whole number of ticks internally.               */
+const TICK_MS=50;
+const MAX_TICKS=400;              /* 20 s ceiling */
+function delayTicksFor(comp){
+    const ms=Math.max(TICK_MS,Number(comp&&comp.delayMs)||150);
+    return Math.max(1,Math.min(MAX_TICKS,Math.round(ms/TICK_MS)));
+}
+function pulseTicksFor(comp){
+    const ms=Math.max(TICK_MS,Number(comp&&comp.pulseMs)||100);
+    return Math.max(1,Math.min(MAX_TICKS,Math.round(ms/TICK_MS)));
+}
+/* Resize the delay ring-buffer while preserving the most recent samples. */
+function ensureDelayQueue(comp){
+    const n=delayTicksFor(comp);
+    const old=Array.isArray(comp.delayQueue)?comp.delayQueue:[];
+    if(old.length!==n){
+        const q=new Array(n).fill(0);
+        const keep=Math.min(old.length,n);
+        for(let i=0;i<keep;i++)q[n-keep+i]=Number(old[old.length-keep+i])?1:0;
+        comp.delayQueue=q;
+    }
+    return comp.delayQueue;
+}
+
 /* ─── helper to initialize a component's `inputs` array based on its type ─── */
 function initComponentInputs(comp){
     if(!comp)return;
     const t=comp.type;
     if(comp.isCustom){
         comp.inputs=new Array((comp.def&&comp.def.inputsCount)||0).fill(0);
-    }else if(t==='INPUT'||t==='OUTPUT'||t==='SCREEN'||t==='PUSH'||t==='NOT'||t==='DELAY'||t==='COLOR'){
+    }else if(t==='INPUT'||t==='OUTPUT'||t==='SCREEN'||t==='PUSH'||t==='NOT'||t==='DELAY'||t==='COLOR'||t==='PULSE'){
         comp.inputs=[0];
     }else if(t==='CLOCK'){
         comp.inputs=[];
     }else{
         comp.inputs=[0,0];
     }
-    // Also ensure delayQueue/clock tracking exist
-    if(t==='DELAY'&&!comp.delayQueue){comp.delayVal=comp.delayVal||3;comp.delayQueue=new Array(comp.delayVal).fill(0)}
+    // ── DELAY: milliseconds-based, backed by a tick queue ──
+    if(t==='DELAY'){
+        if(comp.delayMs===undefined||comp.delayMs===null){
+            // migrate legacy tick-based value (1 old tick ≈ 50 ms)
+            comp.delayMs=(Number(comp.delayVal)||3)*TICK_MS;
+        }
+        comp.delayMs=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,Math.round(comp.delayMs)));
+        ensureDelayQueue(comp);
+    }
+    // ── CLOCK ──
     if(t==='CLOCK'){comp.clockVal=comp.clockVal||5;comp.clockCounter=comp.clockCounter||0}
+    // ── PULSE ──
+    if(t==='PULSE'){
+        comp.pulseMs=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,Math.round(Number(comp.pulseMs)||100)));
+        comp.pulseCounter=comp.pulseCounter||0;
+        if(comp.state===undefined)comp.state=0;
+        comp.outputVal=comp.state;
+    }
 }
 
 /* toast / confirm / prompt */
@@ -406,7 +452,7 @@ function pasteAtCursor(){
         const nid=nextId++;idMap[c.id]=nid;
         const cl=JSON.parse(JSON.stringify(c));cl.id=nid;cl.x=snapValue(c.x+ox);cl.y=snapValue(c.y+oy);
         if(cl.type==='INPUT'||cl.type==='PUSH'){cl.state=0;cl.outputVal=0}
-        if(cl.type==='DELAY')cl.delayQueue=new Array(cl.delayVal||3).fill(0);
+        if(cl.type==='DELAY'){cl.delayMs=cl.delayMs||(Number(cl.delayVal)||3)*TICK_MS;cl.delayQueue=null}
         if(cl.type==='CLOCK'){cl.clockCounter=0;cl.state=0;cl.outputVal=0}
         if(cl.isCustom){
             const dn=cl._defName||cl.type;
@@ -445,7 +491,8 @@ function startGhostDrag(e,type){
         else if(type==='PUSH'){ht='Push';bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><button class="push-btn">PRESS</button><div class="port output"></div></div>`}
         else if(type==='OUTPUT'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port"></div><div class="bulb"></div></div>`}
         else if(type==='NOT'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port"></div><span style="font-size:10px;">NOT</span><div class="port output"></div></div>`}
-        else if(type==='DELAY'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port"></div><input type="number" value="3" style="width:28px;font-size:10px;" disabled><div class="port output"></div></div>`}
+        else if(type==='DELAY'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port"></div><span style="font-size:9px;">150ms</span><div class="port output"></div></div>`}
+        else if(type==='PULSE'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port"></div><span class="pulse-led"></span><span style="font-size:9px;">100ms</span><div class="port output"></div></div>`}
         else if(type==='CLOCK'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:9px;">⏱</span><input type="number" value="5" style="width:28px;font-size:10px;" disabled><div class="port output"></div></div>`}
         else if(type==='COLOR'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port"></div><span style="font-size:9px;">🎨</span><div class="port output"></div></div>`}
         else if(type==='SCREEN'){bc=`<div style="width:40px;height:40px;background:var(--pixel-off);position:relative;"><div class="port" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.7);width:12px;height:12px;border-radius:50%;background:#007bff;border:2px solid #fff;opacity:.5;"></div></div>`;w=40;h=40}
@@ -624,7 +671,8 @@ document.addEventListener('contextmenu',e=>{
 function spawnComponentAt(type,x,y){
     const id=nextId++,s=snapPos(x,y);
     const comp={id,type,x:s.x,y:s.y,state:0,outputVal:0,customLabel:'',
-        delayVal:type==='DELAY'?3:undefined,delayQueue:type==='DELAY'?new Array(3).fill(0):undefined,
+        delayMs:type==='DELAY'?150:undefined,delayQueue:type==='DELAY'?new Array(3).fill(0):undefined,
+        pulseMs:type==='PULSE'?100:undefined,pulseCounter:type==='PULSE'?0:undefined,
         clockVal:type==='CLOCK'?5:undefined,clockCounter:type==='CLOCK'?0:undefined,
         pixelColor:type==='COLOR'?'#39ff14':undefined,
         pixelWidth:type==='SCREEN'?40:undefined,pixelHeight:type==='SCREEN'?40:undefined};
@@ -643,7 +691,7 @@ function spawnCustomGateInstance(gateName,x,y){
     comp.subComps.forEach(sc=>{
         if(sc.isCustom&&sc.type&&savedCustomGates[sc.type])sc.def=savedCustomGates[sc.type];
         initComponentInputs(sc);   /* <-- THE FIX: restore inputs array */
-        if(sc.type==='DELAY'){const v=sc.delayVal||3;sc.delayQueue=new Array(v).fill(0);comp.delayStates[sc.id]={queue:new Array(v).fill(0),ptr:0}}
+        if(sc.type==='DELAY'){const v=delayTicksFor(sc);sc.delayQueue=new Array(v).fill(0);comp.delayStates[sc.id]={queue:new Array(v).fill(0),ptr:0}}
         if(sc.type==='CLOCK'){sc.clockVal=sc.clockVal||5;comp.clockStates[sc.id]={counter:0,state:0,period:sc.clockVal};sc.outputVal=0}
         if(sc.type==='SCREEN'){sc.pixelWidth=sc.pixelWidth||40;sc.pixelHeight=sc.pixelHeight||40}
         if(sc.type==='COLOR')sc.pixelColor=sc.pixelColor||'#39ff14';
@@ -669,7 +717,8 @@ function renderComponent(comp){
     else if(comp.type==='PUSH'){const l=(comp.customLabel||'').trim()||'Push';bc=`<div class="io-port-row"><button class="push-btn ${comp.state===1?'active':''}" id="push-${comp.id}">${comp.state===1?'ON':'PRESS'}</button><div style="display:flex;align-items:center;gap:3px;"><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div><span class="io-label">${l}</span></div></div>`}
     else if(comp.type==='OUTPUT'){const l=(comp.customLabel||'').trim()||'OUT';bc=`<div class="io-port-row" style="flex-direction:row-reverse;"><div class="bulb" id="bulb-${comp.id}"></div><div style="display:flex;align-items:center;gap:3px;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><span class="io-label">${l}</span></div></div>`}
     else if(comp.type==='NOT'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><span style="font-size:10px;font-weight:bold;">NOT</span><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
-    else if(comp.type==='DELAY'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><input type="number" min="1" max="99" value="${comp.delayVal}" class="delay-input" id="delay-val-${comp.id}"><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
+    else if(comp.type==='DELAY'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><input type="number" min="50" max="20000" step="50" value="${comp.delayMs||150}" class="delay-input" id="delay-val-${comp.id}" title="Delay in milliseconds"><span style="font-size:8px;opacity:.6;">ms</span><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
+    else if(comp.type==='PULSE'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><span class="pulse-led ${comp.state===1?'on':''}" id="pulse-led-${comp.id}"></span><input type="number" min="50" max="20000" step="50" value="${comp.pulseMs||100}" class="delay-input" id="pulse-val-${comp.id}" title="Pulse period in milliseconds"><span style="font-size:8px;opacity:.6;">ms</span><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
     else if(comp.type==='CLOCK'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:9px;">⏱</span><input type="number" min="1" max="999" value="${comp.clockVal}" class="delay-input" id="clock-val-${comp.id}"><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
     else if(comp.type==='COLOR'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><input type="color" class="color-picker-input" value="${comp.pixelColor||'#39ff14'}" id="color-val-${comp.id}"><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
     else if(comp.type==='SCREEN'){const w=comp.pixelWidth||40,h=comp.pixelHeight||40;
@@ -688,7 +737,8 @@ function renderComponent(comp){
     if(comp.type==='INPUT'){const b=el.querySelector(`#sw-${comp.id}`);const tg=e=>{e.preventDefault();e.stopPropagation();toggleInput(comp.id)};b.addEventListener('click',tg);b.addEventListener('touchstart',tg,{passive:false})}
     if(comp.type==='PUSH'){const b=el.querySelector(`#push-${comp.id}`);const ps=e=>{e.preventDefault();e.stopPropagation();comp.state=1;comp.outputVal=1;b.classList.add('active');b.innerText='ON';runSimulation();forceSaveState()};const pe=e=>{e.preventDefault();e.stopPropagation();comp.state=0;comp.outputVal=0;b.classList.remove('active');b.innerText='PRESS';runSimulation();forceSaveState()};b.addEventListener('mousedown',ps);b.addEventListener('mouseup',pe);b.addEventListener('mouseleave',pe);b.addEventListener('touchstart',ps,{passive:false});b.addEventListener('touchend',pe,{passive:false});b.addEventListener('touchcancel',pe,{passive:false})}
     if(comp.type==='INPUT'||comp.type==='OUTPUT'||comp.type==='PUSH'){const inp=el.querySelector(`#label-${comp.id}`);inp.addEventListener('input',e=>{comp.customLabel=e.target.value;const ls=el.querySelector('.io-label');if(ls){const dl=comp.type==='INPUT'?'Toggle':comp.type==='PUSH'?'Push':'OUT';ls.innerText=(comp.customLabel||'').trim()||dl}forceSaveState()});inp.addEventListener('mousedown',e=>e.stopPropagation());inp.addEventListener('touchstart',e=>e.stopPropagation())}
-    if(comp.type==='DELAY'){const dInp=el.querySelector(`#delay-val-${comp.id}`);dInp.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(dInp.value)||1;v=Math.max(1,Math.min(99,v));comp.delayVal=v;comp.delayQueue=new Array(v).fill(0);forceSaveState()});dInp.addEventListener('mousedown',e=>e.stopPropagation())}
+    if(comp.type==='DELAY'){const dInp=el.querySelector(`#delay-val-${comp.id}`);dInp.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(dInp.value)||150;v=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,v));comp.delayMs=Math.round(v/TICK_MS)*TICK_MS;dInp.value=comp.delayMs;ensureDelayQueue(comp);forceSaveState()});dInp.addEventListener('mousedown',e=>e.stopPropagation())}
+    if(comp.type==='PULSE'){const pInp=el.querySelector(`#pulse-val-${comp.id}`);pInp.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(pInp.value)||100;v=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,v));comp.pulseMs=Math.round(v/TICK_MS)*TICK_MS;pInp.value=comp.pulseMs;comp.pulseCounter=0;forceSaveState()});pInp.addEventListener('mousedown',e=>e.stopPropagation())}
     if(comp.type==='CLOCK'){const cInp=el.querySelector(`#clock-val-${comp.id}`);cInp.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(cInp.value)||1;v=Math.max(1,Math.min(999,v));comp.clockVal=v;comp.clockCounter=0;forceSaveState()});cInp.addEventListener('mousedown',e=>e.stopPropagation())}
     if(comp.type==='COLOR'){const cInp=el.querySelector(`#color-val-${comp.id}`);cInp.addEventListener('input',e=>{e.stopPropagation();comp.pixelColor=e.target.value;updateVisuals();forceSaveState()});cInp.addEventListener('mousedown',e=>e.stopPropagation())}
     attachPortHandlers(el,'main');
@@ -922,10 +972,10 @@ function evaluateGate(comp,inputs){
     if(comp.type==='XNOR')return(inputs[0]===inputs[1])?1:0;
     if(comp.type==='OUTPUT'||comp.type==='SCREEN'||comp.type==='COLOR')return inputs[0];
     if(comp.type==='CLOCK')return comp.state||0;
-    if(comp.type==='DELAY'){
-        if(!comp.delayQueue){comp.delayVal=comp.delayVal||3;comp.delayQueue=new Array(comp.delayVal).fill(0)}
-        const out=comp.delayQueue[0]||0;comp.delayQueue.shift();comp.delayQueue.push(inputs[0]||0);return out;
-    }
+    if(comp.type==='PULSE')return comp.state||0;
+    /* DELAY is advanced only by the simulation tick — reading here keeps
+       the solver deterministic and stops the double-shift bug. */
+    if(comp.type==='DELAY'){ensureDelayQueue(comp);return comp.outputVal||0}
     return 0;
 }
 function evaluateCustomGate(comp){
@@ -955,10 +1005,12 @@ function evaluateCustomGate(comp){
             sc.inputs=ins;
             if(sc.isCustom)evaluateCustomGate(sc);
             else if(sc.type==='DELAY'){
-                if(comp.delayStates&&comp.delayStates[sc.id]){
-                    const st=comp.delayStates[sc.id];const v=st.queue[st.ptr]||0;st.queue[st.ptr]=ins[0]||0;st.ptr=(st.ptr+1)%st.queue.length;sc.outputVal=v;
-                }else sc.outputVal=0;
-            }else sc.outputVal=evaluateGate(sc,ins);
+                /* read-only — the tick advances nested delay buffers */
+                const st=comp.delayStates&&comp.delayStates[sc.id];
+                sc.outputVal=st?(st.queue[st.ptr]||0):0;
+            }
+            else if(sc.type==='PULSE'){sc.outputVal=sc.state||0}
+            else sc.outputVal=evaluateGate(sc,ins);
             const oc=oldOut!==sc.outputVal;
             const ocs=sc.outputsArray&&(oldOutputs.length!==sc.outputsArray.length||oldOutputs.some((v,i)=>v!==sc.outputsArray[i]));
             if(oc||ocs)changed=true;
@@ -1016,21 +1068,64 @@ function runGenericSimulation(comps,wr,updateFn){
 function runSimulation(){runGenericSimulation(components,wires,updateVisuals)}
 function runModalSimulation(){runGenericSimulation(modalComponents,modalWires,updateModalVisuals)}
 
+/* ── DELAY (ms) ─────────────────────────────────────────────── */
+function tickDelayComponent(comp){
+    const q=ensureDelayQueue(comp);
+    comp.outputVal=q[0]?1:0;
+    q.shift();
+    q.push((comp.inputs&&comp.inputs[0])?1:0);
+}
+/* ── PULSE ──────────────────────────────────────────────────── */
+/* While the input is held high the output toggles every `pulseMs`. */
+function tickPulseComponent(comp){
+    const period=pulseTicksFor(comp);
+    if(((comp.inputs&&comp.inputs[0])?1:0)===1){
+        comp.pulseCounter=(comp.pulseCounter||0)+1;
+        if(comp.pulseCounter>=period){comp.pulseCounter=0;comp.state=comp.state===1?0:1}
+    }else{
+        comp.pulseCounter=0;
+        comp.state=0;
+    }
+    comp.outputVal=comp.state;
+}
+/* Recursively advance DELAY / PULSE components nested inside custom gates. */
+function tickNestedTiming(container){
+    (container.subComps||[]).forEach(sc=>{
+        if(sc.type==='DELAY'){
+            if(!container.delayStates)container.delayStates={};
+            const n=delayTicksFor(sc);
+            let st=container.delayStates[sc.id];
+            if(!st||!Array.isArray(st.queue)||st.queue.length!==n){
+                st={queue:new Array(n).fill(0),ptr:0};
+                container.delayStates[sc.id]=st;
+            }
+            sc.outputVal=st.queue[st.ptr]?1:0;
+            st.queue[st.ptr]=(sc.inputs&&sc.inputs[0])?1:0;
+            st.ptr=(st.ptr+1)%n;
+        }else if(sc.type==='PULSE'){
+            tickPulseComponent(sc);
+        }else if(sc.isCustom){
+            tickNestedTiming(sc);
+        }
+    });
+}
 function tickAll(){
     components.forEach(comp=>{
-        if(comp.type==='DELAY'){if(!comp.delayQueue){comp.delayVal=comp.delayVal||3;comp.delayQueue=new Array(comp.delayVal).fill(0)}const iv=comp.inputs[0]||0;comp.outputVal=comp.delayQueue[0]||0;comp.delayQueue.shift();comp.delayQueue.push(iv)}
-        else if(comp.isCustom){(comp.subComps||[]).forEach(sc=>{if(sc.type==='DELAY'&&comp.delayStates&&comp.delayStates[sc.id]){const st=comp.delayStates[sc.id];const v=st.queue[st.ptr]||0;st.queue[st.ptr]=sc.inputs[0]||0;st.ptr=(st.ptr+1)%st.queue.length;sc.outputVal=v}})}
+        if(comp.type==='DELAY')tickDelayComponent(comp);
+        else if(comp.type==='PULSE')tickPulseComponent(comp);
+        else if(comp.isCustom)tickNestedTiming(comp);
     });
     tickClocksMain(components);runSimulation();
 }
 function tickModal(){
     modalComponents.forEach(comp=>{
-        if(comp.type==='DELAY'){if(!comp.delayQueue){comp.delayVal=comp.delayVal||3;comp.delayQueue=new Array(comp.delayVal).fill(0)}const iv=comp.inputs[0]||0;comp.outputVal=comp.delayQueue[0]||0;comp.delayQueue.shift();comp.delayQueue.push(iv)}
-        else if(comp.isCustom){(comp.subComps||[]).forEach(sc=>{if(sc.type==='DELAY'&&comp.delayStates&&comp.delayStates[sc.id]){const st=comp.delayStates[sc.id];const v=st.queue[st.ptr]||0;st.queue[st.ptr]=sc.inputs[0]||0;st.ptr=(st.ptr+1)%st.queue.length;sc.outputVal=v}})}
+        if(comp.type==='DELAY')tickDelayComponent(comp);
+        else if(comp.type==='PULSE')tickPulseComponent(comp);
+        else if(comp.isCustom)tickNestedTiming(comp);
     });
     tickClocksMain(modalComponents);runModalSimulation();
 }
-setInterval(()=>{if(!isPaused)tickAll();if(isModalOpen())tickModal()},50);
+setInterval(()=>{if(!isPaused)tickAll();if(isModalOpen())tickModal()},TICK_MS);
 function stepSimulation(){tickAll();forceSaveState()}
 
 /* visuals */
@@ -1041,6 +1136,7 @@ function updateVisuals(){
         if(comp.isCustom&&comp.outputsArray&&comp.outputsArray.length)pw=comp.outputsArray.some(v=>v===1);
         el.classList.toggle('powered',pw);
         if(comp.type==='OUTPUT'){const b=document.getElementById(`bulb-${comp.id}`);if(b)b.classList.toggle('on',comp.outputVal===1)}
+        if(comp.type==='PULSE'){const l=document.getElementById(`pulse-led-${comp.id}`);if(l)l.classList.toggle('on',comp.state===1)}
         if(comp.type==='SCREEN'){
             const p=document.getElementById(`pixel-${comp.id}`);
             if(p){
@@ -1066,6 +1162,7 @@ function updateModalVisuals(){
         if(comp.isCustom&&comp.outputsArray&&comp.outputsArray.length)pw=comp.outputsArray.some(v=>v===1);
         el.classList.toggle('powered',pw);
         if(comp.type==='OUTPUT'){const b=el.querySelector('.bulb');if(b)b.classList.toggle('on',comp.outputVal===1)}
+        if(comp.type==='PULSE'){const l=el.querySelector('.pulse-led');if(l)l.classList.toggle('on',comp.state===1)}
         if(comp.type==='SCREEN'){
             const p=document.getElementById(`modal-pixel-${comp.id}`);
             if(p){
@@ -1174,13 +1271,13 @@ function refreshAllInstances(gateName,newDef){
                 newSc.x=old.x!==undefined?old.x:scDef.x;
                 newSc.y=old.y!==undefined?old.y:scDef.y;
                 newSc.customLabel=old.customLabel||'';
-                if(newSc.type==='DELAY'){const v=newSc.delayVal||3;newSc.delayQueue=(old.delayQueueRaw&&old.delayQueueRaw.length===v)?old.delayQueueRaw.slice():new Array(v).fill(0)}
+                if(newSc.type==='DELAY'){newSc.delayQueue=(old.delayQueueRaw&&old.delayQueueRaw.length)?old.delayQueueRaw.slice():null}
                 if(newSc.type==='CLOCK'){newSc.clockCounter=old.clockCounter!==undefined?old.clockCounter:0;newSc.clockVal=old.clockVal||newSc.clockVal||5;newSc.state=old.state||0;newSc.outputVal=old.outputVal||0}
                 if(newSc.type==='SCREEN'){newSc.pixelWidth=old.pixelWidth||40;newSc.pixelHeight=old.pixelHeight||40}
                 if(newSc.type==='COLOR')newSc.pixelColor=old.pixelColor||'#39ff14';
                 if(newSc.isCustom&&newSc.type&&savedCustomGates[newSc.type]){newSc.def=savedCustomGates[newSc.type];if(old.subComps)newSc.subComps=old.subComps;else newSc.subComps=JSON.parse(JSON.stringify(savedCustomGates[newSc.type].innerComps||[]));if(old.subWires)newSc.subWires=old.subWires;else newSc.subWires=(savedCustomGates[newSc.type].innerWires||[]).slice();if(old.delayStates)newSc.delayStates=old.delayStates;if(old.clockStates)newSc.clockStates=old.clockStates;if(old.outputsArray)newSc.outputsArray=old.outputsArray}
             }else{
-                if(newSc.type==='DELAY')newSc.delayQueue=new Array(newSc.delayVal||3).fill(0);
+                if(newSc.type==='DELAY')newSc.delayQueue=null;
                 if(newSc.type==='CLOCK'){newSc.clockCounter=0;newSc.state=0;newSc.outputVal=0}
                 if(newSc.type==='SCREEN'){newSc.pixelWidth=newSc.pixelWidth||40;newSc.pixelHeight=newSc.pixelHeight||40}
                 if(newSc.type==='COLOR')newSc.pixelColor=newSc.pixelColor||'#39ff14';
@@ -1192,7 +1289,7 @@ function refreshAllInstances(gateName,newDef){
         instance.subComps=newSubComps;
         instance.subWires=(freshDef.innerWires||[]).slice();
         instance.def=freshDef;
-        if(instance.delayStates){const nds={};for(const sc of newSubComps)if(sc.type==='DELAY'){const v=sc.delayVal||3;const old=oldStateMap.get(sc.id);const q=(old&&old.delayQueueRaw&&old.delayQueueRaw.length===v)?old.delayQueueRaw.slice():new Array(v).fill(0);nds[sc.id]={queue:q,ptr:0}}instance.delayStates=nds}
+        if(instance.delayStates){const nds={};for(const sc of newSubComps)if(sc.type==='DELAY'){const v=delayTicksFor(sc);const old=oldStateMap.get(sc.id);const q=(old&&old.delayQueueRaw&&old.delayQueueRaw.length===v)?old.delayQueueRaw.slice():new Array(v).fill(0);nds[sc.id]={queue:q,ptr:0}}instance.delayStates=nds}
         if(instance.clockStates){const ncs={};for(const sc of newSubComps)if(sc.type==='CLOCK'){const old=oldStateMap.get(sc.id);ncs[sc.id]={counter:(old&&old.clockCounter)||0,state:(old&&old.state)||0,period:sc.clockVal||5}}instance.clockStates=ncs}
         if(instance.outputsArray)instance.outputsArray=new Array(freshDef.outputsCount||0).fill(0);
         const el=document.getElementById(`comp-${instance.id}`);
@@ -1271,7 +1368,7 @@ function mergeImportedState(state){
     const nc=(state.components||[]).map(comp=>{
         const cl=JSON.parse(JSON.stringify(comp));cl.id=idMap[comp.id];
         if(cl.isCustom&&cl.type&&savedCustomGates[cl.type])cl.def=savedCustomGates[cl.type];
-        if(cl.type==='DELAY')cl.delayQueue=new Array(cl.delayVal||3).fill(0);
+        if(cl.type==='DELAY'){cl.delayMs=cl.delayMs||(Number(cl.delayVal)||3)*TICK_MS;cl.delayQueue=null}
         if(cl.type==='CLOCK'){cl.clockVal=cl.clockVal||5;cl.clockCounter=0}
         if(cl.type==='SCREEN'){cl.pixelWidth=cl.pixelWidth||40;cl.pixelHeight=cl.pixelHeight||40}
         if(cl.type==='COLOR')cl.pixelColor=cl.pixelColor||'#39ff14';
@@ -1371,7 +1468,7 @@ function normalizeCustomGateDef(def){
 
 /* state serialization */
 function buildFullState(){
-    return{version:'3.4',components,wires,customContainers,savedCustomGates,nextId,panX,panY,zoom,isDark:document.body.classList.contains('dark-theme')};
+    return{version:'3.5',components,wires,customContainers,savedCustomGates,nextId,panX,panY,zoom,isDark:document.body.classList.contains('dark-theme')};
 }
 function saveToLocalStorage(){try{localStorage.setItem('logic_sim_save_state_v4',JSON.stringify(buildFullState()))}catch(_){}}
 function loadFromLocalStorage(){
@@ -1487,7 +1584,11 @@ function openCustomGateModal(gateType,isEditing){
 
     modal.style.display='flex';
     markModalPortPositionsDirty();
-    requestAnimationFrame(()=>{drawModalWires();runModalSimulation()});
+    requestAnimationFrame(()=>{
+        fitModalToContents();      /* ★ centre + auto-zoom to fit */
+        drawModalWires();
+        runModalSimulation();
+    });
     setTimeout(()=>{nameInput.focus();nameInput.setSelectionRange(0,nameInput.value.length)},80);
 }
 function closeCustomGateModal(result){
@@ -1571,6 +1672,7 @@ function resetModalState(){
     modalGhostType=null;modalDraggingWire=null;
     modalPortPositions={};modalPortPositionsDirty=true;
     isDraggingModalGate=false;activeModalComp=null;
+    modalGroupDragStartPositions=null;
     modalSelectedIds=new Set();modalSelectedSourceIndex=0;
     modalWirePouringState=null;
     modalIsBoxSelecting=false;modalBoxSelectStartX=0;modalBoxSelectStartY=0;
@@ -1585,11 +1687,12 @@ function clearModalCanvas(){
 }
 function setupModalToolbar(){
     const tb=document.getElementById('custom-gate-modal-toolbar');if(!tb)return;tb.innerHTML='';
-    const std=[{type:'INPUT',label:'Toggle',color:'#2563eb'},{type:'PUSH',label:'Push',color:'#6c5ce7'},{type:'OUTPUT',label:'Output',color:'#f59e0b'},{type:'AND',label:'AND',color:'#16a34a'},{type:'OR',label:'OR',color:'#8b5cf6'},{type:'XOR',label:'XOR',color:'#ec4899'},{type:'NOT',label:'NOT',color:'#ef4444'},{type:'NAND',label:'NAND',color:'#0f766e'},{type:'NOR',label:'NOR',color:'#7c3aed'},{type:'XNOR',label:'XNOR',color:'#0891b2'},{type:'DELAY',label:'Delay',color:'#64748b'},{type:'CLOCK',label:'Clock',color:'#0d9488'},{type:'COLOR',label:'Color',color:'#db2777'},{type:'SCREEN',label:'Pixel',color:'#d97706'}];
+    const std=[{type:'INPUT',label:'Toggle',color:'#2563eb'},{type:'PUSH',label:'Push',color:'#6c5ce7'},{type:'OUTPUT',label:'Output',color:'#f59e0b'},{type:'AND',label:'AND',color:'#16a34a'},{type:'OR',label:'OR',color:'#8b5cf6'},{type:'XOR',label:'XOR',color:'#ec4899'},{type:'NOT',label:'NOT',color:'#ef4444'},{type:'NAND',label:'NAND',color:'#0f766e'},{type:'NOR',label:'NOR',color:'#7c3aed'},{type:'XNOR',label:'XNOR',color:'#0891b2'},{type:'DELAY',label:'Delay',color:'#64748b'},{type:'CLOCK',label:'Clock',color:'#0d9488'},{type:'PULSE',label:'Pulse',color:'#f43f5e'},{type:'COLOR',label:'Color',color:'#db2777'},{type:'SCREEN',label:'Pixel',color:'#d97706'}];
     std.forEach(g=>{const b=document.createElement('div');b.className='tool-btn';b.style.background=g.color;b.textContent=g.label;b.onmousedown=e=>startModalGhostDrag(e,g.type);b.ontouchstart=e=>startModalGhostDrag(e,g.type);tb.appendChild(b)});
     Object.keys(savedCustomGates).forEach(name=>{
         const def=savedCustomGates[name];const b=document.createElement('div');b.className='tool-btn';b.style.background=def.color||'#6f42c1';b.textContent=name;b.onmousedown=e=>startModalGhostDrag(e,name);b.ontouchstart=e=>startModalGhostDrag(e,name);tb.appendChild(b);
     });
+    const fitBtn=document.createElement('div');fitBtn.className='tool-btn';fitBtn.style.background='#4b5563';fitBtn.textContent='⤢ Fit';fitBtn.title='Zoom to fit the whole circuit';fitBtn.onclick=()=>fitModalToContents();tb.appendChild(fitBtn);
 }
 function setupModalEventListeners(){
     if(modalEventListenersAttached)return;modalEventListenersAttached=true;
@@ -1687,7 +1790,7 @@ function pasteModalAtCursor(){
         const nid=modalNextId++;idMap[c.id]=nid;
         const cl=JSON.parse(JSON.stringify(c));cl.id=nid;cl.x=modalSnapValue(c.x+ox);cl.y=modalSnapValue(c.y+oy);
         if(cl.type==='INPUT'||cl.type==='PUSH'){cl.state=0;cl.outputVal=0}
-        if(cl.type==='DELAY')cl.delayQueue=new Array(cl.delayVal||3).fill(0);
+        if(cl.type==='DELAY'){cl.delayMs=cl.delayMs||(Number(cl.delayVal)||3)*TICK_MS;cl.delayQueue=null}
         if(cl.type==='CLOCK'){cl.clockCounter=0;cl.state=0;cl.outputVal=0}
         if(cl.isCustom){
             const dn=cl._defName||cl.type;
@@ -1751,6 +1854,44 @@ function updateModalTransform(){const c=document.getElementById('custom-gate-mod
 function modalSnapValue(v){return Math.round(v/20)*20}
 function modalSnapPos(x,y){return{x:modalSnapValue(x),y:modalSnapValue(y)}}
 
+/* ═══════════════════════════════════════════════════════════════
+   AUTO-FIT — centre + zoom the editor so the whole gate fits
+   ═══════════════════════════════════════════════════════════════ */
+function fitModalToContents(padding=48){
+    const vp=document.getElementById('custom-gate-modal-viewport');
+    if(!vp||!modalComponents.length)return;
+    const r=vp.getBoundingClientRect();
+    if(r.width<10||r.height<10)return;      /* not laid out yet */
+
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    modalComponents.forEach(c=>{
+        const el=document.getElementById(`modal-comp-${c.id}`);
+        let w,h;
+        if(el&&el.offsetWidth){w=el.offsetWidth;h=el.offsetHeight}
+        else{w=c.type==='SCREEN'?(c.pixelWidth||40):140;h=c.type==='SCREEN'?(c.pixelHeight||40):70}
+        if(c.x<minX)minX=c.x;
+        if(c.y<minY)minY=c.y;
+        if(c.x+w>maxX)maxX=c.x+w;
+        if(c.y+h>maxY)maxY=c.y+h;
+    });
+    if(!isFinite(minX))return;
+
+    const cw=Math.max(1,maxX-minX), ch=Math.max(1,maxY-minY);
+    const availW=Math.max(40,r.width-padding*2);
+    const availH=Math.max(40,r.height-padding*2);
+
+    let z=Math.min(availW/cw,availH/ch);
+    z=Math.max(0.15,Math.min(1.6,z));         /* clamp to sane bounds */
+
+    modalZoom=z;
+    modalPanX=r.width/2-(minX+cw/2)*z;
+    modalPanY=r.height/2-(minY+ch/2)*z;
+
+    updateModalTransform();
+    markModalPortPositionsDirty();
+    drawModalWires();
+}
+
 /* ghost drag (modal) */
 function startModalGhostDrag(e,type){
     e.preventDefault();e.stopPropagation();modalGhostType=type;
@@ -1772,7 +1913,8 @@ function startModalGhostDrag(e,type){
     else if(type==='PUSH'){ht='Push';bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><button class="push-btn">PRESS</button><div class="port output"></div></div>`}
     else if(type==='OUTPUT'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port"></div><div class="bulb"></div></div>`}
     else if(type==='NOT'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port"></div><span style="font-size:10px;">NOT</span><div class="port output"></div></div>`}
-    else if(type==='DELAY'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port"></div><input type="number" value="3" style="width:28px;font-size:10px;" disabled><div class="port output"></div></div>`}
+    else if(type==='DELAY'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port"></div><span style="font-size:9px;">150ms</span><div class="port output"></div></div>`}
+    else if(type==='PULSE'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port"></div><span class="pulse-led"></span><span style="font-size:9px;">100ms</span><div class="port output"></div></div>`}
     else if(type==='CLOCK'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:9px;">⏱</span><input type="number" value="5" style="width:28px;font-size:10px;" disabled><div class="port output"></div></div>`}
     else if(type==='COLOR'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port"></div><input type="color" value="#39ff14" disabled style="width:26px;height:20px;padding:1px;border-radius:3px;background:transparent;"><div class="port output"></div></div>`}
     else if(type==='SCREEN'){bc=`<div style="width:40px;height:40px;background:var(--pixel-off);position:relative;"><div class="port" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.7);width:12px;height:12px;border-radius:50%;background:#007bff;border:2px solid #fff;opacity:.5;"></div></div>`;w=40;h=40;isPixel=true}
@@ -1802,7 +1944,8 @@ function updateModalGhostPosition(cx,cy,w,h){
 function spawnModalComponentAt(type,x,y){
     const s=modalSnapPos(x,y);
     const comp={id:modalNextId++,type,x:s.x,y:s.y,state:0,outputVal:0,customLabel:'',
-        delayVal:type==='DELAY'?3:undefined,delayQueue:type==='DELAY'?new Array(3).fill(0):undefined,
+        delayMs:type==='DELAY'?150:undefined,delayQueue:type==='DELAY'?new Array(3).fill(0):undefined,
+        pulseMs:type==='PULSE'?100:undefined,pulseCounter:type==='PULSE'?0:undefined,
         clockVal:type==='CLOCK'?5:undefined,clockCounter:type==='CLOCK'?0:undefined,
         pixelColor:type==='COLOR'?'#39ff14':undefined,
         pixelWidth:type==='SCREEN'?40:undefined,pixelHeight:type==='SCREEN'?40:undefined};
@@ -1816,7 +1959,7 @@ function spawnModalComponentAt(type,x,y){
         comp.subComps.forEach(sc=>{
             if(sc.isCustom&&sc.type&&savedCustomGates[sc.type])sc.def=savedCustomGates[sc.type];
             initComponentInputs(sc);
-            if(sc.type==='DELAY'){const v=sc.delayVal||3;sc.delayQueue=new Array(v).fill(0);comp.delayStates[sc.id]={queue:new Array(v).fill(0),ptr:0}}
+            if(sc.type==='DELAY'){const v=delayTicksFor(sc);sc.delayQueue=new Array(v).fill(0);comp.delayStates[sc.id]={queue:new Array(v).fill(0),ptr:0}}
             if(sc.type==='CLOCK')comp.clockStates[sc.id]={counter:0,state:0,period:sc.clockVal||5};
         });
     }else initComponentInputs(comp);
@@ -1844,7 +1987,8 @@ function renderModalComponent(comp){
     else if(comp.type==='PUSH'){tt='Push';bc=`<div class="io-port-row"><button class="push-btn" id="modal-push-${comp.id}">PRESS</button><div style="display:flex;align-items:center;gap:3px;"><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div><input type="text" class="port-label-input" placeholder="Name" value="${comp.customLabel||''}" id="modal-label-${comp.id}"></div></div>`}
     else if(comp.type==='OUTPUT'){tt='OUT';bc=`<div class="io-port-row" style="flex-direction:row-reverse;"><div class="bulb"></div><div style="display:flex;align-items:center;gap:3px;"><div class="port" id="modal-port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><input type="text" class="port-label-input" placeholder="Name" value="${comp.customLabel||''}" id="modal-label-${comp.id}"></div></div>`}
     else if(comp.type==='NOT'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port" id="modal-port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><span style="font-size:10px;font-weight:bold;">NOT</span><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
-    else if(comp.type==='DELAY'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port" id="modal-port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><input type="number" min="1" max="99" value="${comp.delayVal||3}" class="delay-input" id="modal-delay-val-${comp.id}"><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
+    else if(comp.type==='DELAY'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="modal-port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><input type="number" min="50" max="20000" step="50" value="${comp.delayMs||150}" class="delay-input" id="modal-delay-val-${comp.id}" title="Delay in milliseconds"><span style="font-size:8px;opacity:.6;">ms</span><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
+    else if(comp.type==='PULSE'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="modal-port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><span class="pulse-led ${comp.state===1?'on':''}"></span><input type="number" min="50" max="20000" step="50" value="${comp.pulseMs||100}" class="delay-input" id="modal-pulse-val-${comp.id}" title="Pulse period in milliseconds"><span style="font-size:8px;opacity:.6;">ms</span><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
     else if(comp.type==='CLOCK'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:9px;">⏱</span><input type="number" min="1" max="999" value="${comp.clockVal||5}" class="delay-input" id="modal-clock-val-${comp.id}"><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
     else if(comp.type==='COLOR'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="modal-port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><input type="color" class="color-picker-input" value="${comp.pixelColor||'#39ff14'}" id="modal-color-val-${comp.id}"><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
     else if(comp.type==='SCREEN'){tt='Pixel';const w=comp.pixelWidth||40,h=comp.pixelHeight||40;
@@ -1868,7 +2012,8 @@ function renderModalComponent(comp){
     if(comp.type==='INPUT'){const b=el.querySelector(`#modal-sw-${comp.id}`);const tg=e=>{e.preventDefault();e.stopPropagation();comp.state=comp.state===0?1:0;comp.outputVal=comp.state;b.classList.toggle('active',comp.state===1);b.innerText=comp.state===1?'ON':'OFF';runModalSimulation()};b.addEventListener('click',tg);b.addEventListener('touchstart',tg,{passive:false})}
     if(comp.type==='PUSH'){const b=el.querySelector(`#modal-push-${comp.id}`);const ps=e=>{e.preventDefault();e.stopPropagation();comp.state=1;comp.outputVal=1;b.classList.add('active');b.innerText='ON';runModalSimulation()};const pe=e=>{e.preventDefault();e.stopPropagation();comp.state=0;comp.outputVal=0;b.classList.remove('active');b.innerText='PRESS';runModalSimulation()};b.addEventListener('mousedown',ps);b.addEventListener('mouseup',pe);b.addEventListener('mouseleave',pe);b.addEventListener('touchstart',ps,{passive:false});b.addEventListener('touchend',pe,{passive:false})}
     if(comp.type==='INPUT'||comp.type==='OUTPUT'||comp.type==='PUSH'){const inp=el.querySelector(`#modal-label-${comp.id}`);if(inp){inp.addEventListener('input',e=>{comp.customLabel=e.target.value});inp.addEventListener('mousedown',e=>e.stopPropagation());inp.addEventListener('touchstart',e=>e.stopPropagation())}}
-    if(comp.type==='DELAY'){const i=el.querySelector(`#modal-delay-val-${comp.id}`);i.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(i.value)||1;v=Math.max(1,Math.min(99,v));comp.delayVal=v;comp.delayQueue=new Array(v).fill(0)});i.addEventListener('mousedown',e=>e.stopPropagation())}
+    if(comp.type==='DELAY'){const i=el.querySelector(`#modal-delay-val-${comp.id}`);i.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(i.value)||150;v=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,v));comp.delayMs=Math.round(v/TICK_MS)*TICK_MS;i.value=comp.delayMs;ensureDelayQueue(comp)});i.addEventListener('mousedown',e=>e.stopPropagation())}
+    if(comp.type==='PULSE'){const i=el.querySelector(`#modal-pulse-val-${comp.id}`);i.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(i.value)||100;v=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,v));comp.pulseMs=Math.round(v/TICK_MS)*TICK_MS;i.value=comp.pulseMs;comp.pulseCounter=0});i.addEventListener('mousedown',e=>e.stopPropagation())}
     if(comp.type==='CLOCK'){const i=el.querySelector(`#modal-clock-val-${comp.id}`);i.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(i.value)||1;v=Math.max(1,Math.min(999,v));comp.clockVal=v;comp.clockCounter=0});i.addEventListener('mousedown',e=>e.stopPropagation())}
     if(comp.type==='COLOR'){const i=el.querySelector(`#modal-color-val-${comp.id}`);i.addEventListener('input',e=>{e.stopPropagation();comp.pixelColor=e.target.value});i.addEventListener('mousedown',e=>e.stopPropagation())}
     document.getElementById('custom-gate-modal-canvas').appendChild(el);
@@ -1905,6 +2050,12 @@ function startDragModalGate(e,id){
     const cx=e.clientX||(e.touches&&e.touches[0].clientX)||0,cy=e.clientY||(e.touches&&e.touches[0].clientY)||0;
     modalGateGrabOffsetX=(cx-vpR.left-modalPanX)/modalZoom-comp.x;
     modalGateGrabOffsetY=(cy-vpR.top-modalPanY)/modalZoom-comp.y;
+    /* ★ multi-selection group drag — mirrors the main canvas behaviour */
+    if(modalSelectedIds.size>1&&modalSelectedIds.has(id)){
+        modalGroupDragStartPositions=new Map();
+        modalSelectedIds.forEach(sid=>{const sc=modalComponents.find(c=>c.id===sid);if(sc)modalGroupDragStartPositions.set(sid,{x:sc.x,y:sc.y})});
+        modalGroupDragAnchorStartX=comp.x;modalGroupDragAnchorStartY=comp.y;
+    }else modalGroupDragStartPositions=null;
     e.stopPropagation();e.preventDefault();
 }
 function moveModalDraggedGate(cx,cy){
@@ -1914,9 +2065,19 @@ function moveModalDraggedGate(cx,cy){
     const nX=modalSnapValue(mx-modalGateGrabOffsetX),nY=modalSnapValue(my-modalGateGrabOffsetY);
     activeModalComp.x=nX;activeModalComp.y=nY;
     const el=document.getElementById(`modal-comp-${activeModalComp.id}`);if(el){el.style.left=nX+'px';el.style.top=nY+'px'}
+    /* ★ drag the rest of the selection along with the anchor */
+    if(modalGroupDragStartPositions){
+        const dx=nX-modalGroupDragAnchorStartX,dy=nY-modalGroupDragAnchorStartY;
+        modalGroupDragStartPositions.forEach((sp,sid)=>{
+            if(sid===activeModalComp.id)return;
+            const sc=modalComponents.find(c=>c.id===sid);if(!sc)return;
+            sc.x=sp.x+dx;sc.y=sp.y+dy;
+            const se=document.getElementById(`modal-comp-${sid}`);if(se){se.style.left=sc.x+'px';se.style.top=sc.y+'px'}
+        });
+    }
     markModalPortPositionsDirty();drawModalWires();
 }
-function finishModalGateDrag(){if(!isDraggingModalGate)return;isDraggingModalGate=false;activeModalComp=null;markModalPortPositionsDirty();drawModalWires()}
+function finishModalGateDrag(){if(!isDraggingModalGate)return;isDraggingModalGate=false;activeModalComp=null;modalGroupDragStartPositions=null;markModalPortPositionsDirty();drawModalWires()}
 function removeModalComponent(id){
     modalComponents=modalComponents.filter(c=>c.id!==id);
     modalWires=modalWires.filter(w=>w.fromComp!==id&&w.toComp!==id);
@@ -2147,6 +2308,7 @@ window.closeCustomGateModalOutside=closeCustomGateModalOutside;
 window.startDragModalGate=startDragModalGate;window.removeModalComponent=removeModalComponent;
 window.refreshAllInstances=refreshAllInstances;
 window.deleteCurrentCustomGate = deleteCurrentCustomGate;
+window.fitModalToContents = fitModalToContents;
 
 /* init */
 window.addEventListener('load',()=>{

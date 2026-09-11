@@ -16,10 +16,14 @@ button:hover,.tool-btn:hover{background:#0056b3}
 .tool-btn:active{cursor:grabbing}
 .toolbar-group{display:flex;gap:3px;align-items:center;border-left:2px solid var(--border-color);padding-left:5px;flex-shrink:0}
 .toolbar-group:first-child{border-left:none;padding-left:0}
-#viewport{position:absolute;top:62px;left:0;right:0;bottom:0;overflow:hidden;cursor:grab;touch-action:none;transform:translateZ(0)}
+#viewport{position:absolute;top:62px;left:0;right:0;bottom:0;overflow:hidden;cursor:grab;touch-action:none;transform:translateZ(0);
+    background-image:radial-gradient(var(--dot-color) 1px,transparent 1px);
+    background-size:20px 20px;
+    background-position:0 0;
+    background-repeat:repeat}
 #viewport:active{cursor:grabbing}
 #canvas{position:absolute;width:100%;height:100%;top:0;left:0;transform-origin:0 0;pointer-events:all;will-change:transform}
-#grid-bg{position:absolute;top:0;left:0;width:100%;height:100%;background-image:radial-gradient(var(--dot-color) 1px,transparent 1px);background-size:20px 20px;pointer-events:auto;z-index:0}
+#grid-bg{display:none!important}
 svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;overflow:visible;z-index:1}
 .gate{position:absolute;--gate-color:var(--gate-header);background:var(--gate-bg);border:2px solid var(--gate-color);border-radius:6px;box-shadow:0 4px 6px rgba(0,0,0,.1);cursor:move;z-index:3;touch-action:none;pointer-events:auto;transition:border-color .15s,box-shadow .15s;width:140px;height:auto;min-width:140px;will-change:transform,left,top}
 .gate.powered{border-color:var(--gate-color);box-shadow:0 0 10px color-mix(in srgb,var(--gate-color) 55%,transparent)}
@@ -89,15 +93,19 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
 .toast.success{border-left-color:#28a745}.toast.error{border-left-color:#dc3545}.toast.info{border-left-color:#17a2b8}
 .toast .toast-close{float:right;margin-left:10px;cursor:pointer;opacity:.6}
 @keyframes slideIn{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:translateX(0)}}
-#confirm-modal,#prompt-modal,#ic-modal{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:3000;display:none;align-items:center;justify-content:center}
-#confirm-modal .modal-box,#prompt-modal .modal-box{background:var(--toolbar-bg);color:var(--text-color);padding:20px;border-radius:10px;max-width:380px;width:90%;box-shadow:0 8px 30px rgba(0,0,0,.3);border:1px solid var(--border-color)}
-#confirm-modal .modal-box h3,#prompt-modal .modal-box h3{margin-top:0;font-size:15px}
-#confirm-modal .modal-box .btn-row,#prompt-modal .modal-box .btn-row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
-#confirm-modal .modal-box .btn-row button,#prompt-modal .modal-box .btn-row button{padding:5px 16px;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:11px}
-#confirm-modal .modal-box .btn-row .btn-cancel,#prompt-modal .modal-box .btn-row .btn-cancel{background:#6c757d;color:#fff}
+#confirm-modal,#prompt-modal,#ic-modal,#folder-modal{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:3000;display:none;align-items:center;justify-content:center}
+#confirm-modal .modal-box,#prompt-modal .modal-box,#folder-modal .modal-box{background:var(--toolbar-bg);color:var(--text-color);padding:20px;border-radius:10px;max-width:380px;width:90%;box-shadow:0 8px 30px rgba(0,0,0,.3);border:1px solid var(--border-color)}
+#confirm-modal .modal-box h3,#prompt-modal .modal-box h3,#folder-modal .modal-box h3{margin-top:0;font-size:15px}
+#confirm-modal .modal-box .btn-row,#prompt-modal .modal-box .btn-row,#folder-modal .modal-box .btn-row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+#confirm-modal .modal-box .btn-row button,#prompt-modal .modal-box .btn-row button,#folder-modal .modal-box .btn-row button{padding:5px 16px;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:11px}
+#confirm-modal .modal-box .btn-row .btn-cancel,#prompt-modal .modal-box .btn-row .btn-cancel,#folder-modal .modal-box .btn-row .btn-cancel{background:#6c757d;color:#fff}
 #confirm-modal .modal-box .btn-row .btn-confirm{background:#dc3545;color:#fff}
 #prompt-modal .modal-box .btn-row .btn-confirm{background:#007bff;color:#fff}
+#folder-modal .modal-box .btn-row .btn-confirm{background:#007bff;color:#fff}
 #prompt-input{background:var(--bg-color);color:var(--text-color)}
+#folder-modal .modal-box label{display:block;font-size:11px;margin-bottom:4px;margin-top:10px;opacity:.85}
+#folder-modal .modal-box input[type=text]{width:100%;padding:6px;border:1px solid var(--border-color);border-radius:4px;font-size:13px;background:var(--bg-color);color:var(--text-color);font-family:inherit;outline:none}
+#folder-modal .modal-box input[type=color]{width:100%;height:32px;border:1px solid var(--border-color);border-radius:4px;padding:2px;background:var(--bg-color);cursor:pointer}
 #file-input{display:none}
 #selection-box{position:absolute;border:1.5px dashed #ffc107;background:rgba(255,193,7,.12);z-index:500;pointer-events:none;display:none}
 #pour-indicator{display:none;background:#ff6b00;color:#fff;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:bold;margin-left:4px;animation:pourPulse .8s ease-in-out infinite alternate;white-space:nowrap;align-items:center;gap:5px}
@@ -114,10 +122,10 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
 #custom-gate-modal .cg-sim-row{display:flex;gap:8px;flex:1;min-height:0}
 #custom-gate-modal #custom-gate-modal-toolbar{width:100px;flex-shrink:0;overflow-y:auto;overflow-x:hidden;background:var(--bg-color);border:1px solid var(--border-color);border-radius:6px;padding:6px;display:flex;flex-direction:column;gap:4px}
 #custom-gate-modal #custom-gate-modal-toolbar .tool-btn{font-size:10px;padding:3px 5px;width:100%;justify-content:center}
-#custom-gate-modal #custom-gate-modal-viewport{flex:1;position:relative;overflow:hidden;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-color);min-width:0;cursor:grab;touch-action:none}
+#custom-gate-modal #custom-gate-modal-viewport{flex:1;position:relative;overflow:hidden;border:1px solid var(--border-color);border-radius:6px;background-color:var(--bg-color);background-image:radial-gradient(var(--dot-color) 1px,transparent 1px);background-size:20px 20px;background-position:0 0;background-repeat:repeat;min-width:0;cursor:grab;touch-action:none}
 #custom-gate-modal #custom-gate-modal-viewport:active{cursor:grabbing}
 #custom-gate-modal #custom-gate-modal-canvas{position:absolute;top:0;left:0;width:100%;height:100%;transform-origin:0 0;will-change:transform}
-#custom-gate-modal #custom-gate-modal-grid-bg{position:absolute;top:0;left:0;width:100%;height:100%;background-image:radial-gradient(var(--dot-color) 1px,transparent 1px);background-size:20px 20px;pointer-events:auto;z-index:0}
+#custom-gate-modal #custom-gate-modal-grid-bg{display:none!important}
 #custom-gate-modal #custom-gate-modal-wires{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;overflow:visible;z-index:1}
 #custom-gate-modal #custom-gate-modal-ghost-gate{position:absolute;display:none;pointer-events:none;z-index:1000;background:var(--gate-bg);border:2px dashed var(--gate-color,#007bff);border-radius:6px;opacity:.9;box-shadow:0 4px 10px rgba(0,0,0,.15);transform-origin:0 0;width:140px;height:auto}
 #custom-gate-modal #custom-gate-modal-ghost-gate .gate-header{background:var(--gate-color,#007bff);color:#fff;padding:4px 6px;font-size:10px;display:flex;justify-content:space-between;align-items:center;border-top-left-radius:4px;border-top-right-radius:4px;min-height:26px;gap:4px}
@@ -135,7 +143,28 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
 #custom-gate-modal .modal-content .btn-row button{padding:5px 16px;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:11px}
 #custom-gate-modal .modal-content .btn-row .btn-cancel{background:#6c757d;color:#fff}
 #custom-gate-modal .modal-content .btn-row .btn-confirm{background:#28a745;color:#fff}
-#confirm-modal, #prompt-modal { z-index: 4000 !important; }
+#confirm-modal, #prompt-modal, #folder-modal { z-index: 4000 !important; }
+
+/* ══════════════════════════════════════════════════════════════
+   CUSTOM-GATE FOLDERS
+   ══════════════════════════════════════════════════════════════ */
+.gate-folder-btn{gap:5px;position:relative;transition:background .1s,outline .1s}
+.gate-folder-btn:hover{filter:brightness(1.12)}
+.gate-folder-btn.active{outline:2px solid #ffc107;outline-offset:1px;filter:brightness(1.15)}
+.gate-folder-btn.drag-over{outline:3px dashed #ffc107;outline-offset:2px;filter:brightness(1.25)}
+.folder-count{background:rgba(0,0,0,.35);border-radius:8px;padding:0 5px;font-size:9px;line-height:14px;font-weight:bold}
+.folder-add-btn{background:#475569!important}
+.folder-add-btn:hover{background:#334155!important}
+#gate-folder-dropdown{position:fixed;z-index:2600;background:var(--toolbar-bg);color:var(--text-color);border:1px solid var(--border-color);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.28);padding:4px;min-width:150px;max-height:60vh;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.gate-folder-item{display:flex;align-items:center;gap:7px;padding:5px 9px;border-radius:4px;cursor:grab;font-size:11px;white-space:nowrap;color:var(--text-color)}
+.gate-folder-item:hover{background:rgba(127,127,127,.18)}
+.gate-folder-item:active{cursor:grabbing}
+.gf-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,.25) inset}
+.gate-folder-empty{padding:6px 9px;font-size:11px;opacity:.55;white-space:nowrap;font-style:italic}
+#folder-context-menu{position:fixed;z-index:2700;background:var(--toolbar-bg);color:var(--text-color);border:1px solid var(--border-color);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.3);padding:4px;min-width:210px;display:flex;flex-direction:column;gap:2px}
+.fcm-item{padding:7px 10px;border-radius:4px;cursor:pointer;font-size:11px;white-space:nowrap;color:var(--text-color)}
+.fcm-item:hover{background:rgba(127,127,127,.18)}
+.fcm-item.fcm-danger{color:#ef4444}
 </style>
 </head>
 <body>
@@ -175,6 +204,7 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
         <button onclick="toggleTheme()" style="background:#6366f1;">Theme</button>
         <button onclick="clearAll()" style="background:#dc3545;">Clear</button>
         <button onclick="toggleInstructions()" style="background:#8b5cf6;">Tips</button>
+        <button id="toast-btn" onclick="toggleToasts()" style="background:#8b5cf6;" title="Toggle notifications">🔔</button>
     </div>
     <div class="toolbar-group">
         <button onclick="exportCircuit()" style="background:#28a745;">⬇ Export</button>
@@ -223,6 +253,18 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
     </div>
 </div>
 
+<div id="folder-modal" onclick="closeFolderDialogOutside(event)">
+    <div class="modal-box" onclick="event.stopPropagation()">
+        <h3 id="folder-modal-title">New Folder</h3>
+        <p id="folder-modal-message" style="font-size:11px;opacity:.75;margin:0;">Choose a name and color for the folder.</p>
+        <label>Name</label>
+        <input type="text" id="folder-name-input" placeholder="e.g. Arithmetic" autocomplete="off" />
+        <label>Color</label>
+        <input type="color" id="folder-color-input" value="#475569" />
+        <div class="btn-row"><button class="btn-cancel" onclick="closeFolderDialog(false)">Cancel</button><button class="btn-confirm" onclick="closeFolderDialog(true)">OK</button></div>
+    </div>
+</div>
+
 <div id="custom-gate-modal" onclick="closeCustomGateModalOutside(event)">
     <div class="modal-content" onclick="event.stopPropagation()">
         <h3><span id="custom-gate-modal-title-text">Edit Custom Gate</span><span id="modal-pour-indicator">🔌 Pour mode</span></h3>
@@ -241,6 +283,7 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
             <div class="cg-info">
                 <div><label>Gate Name:</label><input type="text" id="custom-gate-name-input" placeholder="Enter gate name"></div>
                 <div><label>Gate Color:</label><input type="color" id="custom-gate-color-input" value="#6f42c1"></div>
+                <div><label>Folder (optional):</label><input type="text" id="custom-gate-folder-input" list="custom-gate-folder-list" placeholder="(none)" autocomplete="off"><datalist id="custom-gate-folder-list"></datalist></div>
             </div>
         </div>
         <div class="btn-row">
@@ -255,6 +298,9 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
 
 <div class="instructions" id="instructions-box">
     <button class="instructions-close" onclick="toggleInstructions(false)">✕</button>
+    • <strong>Create folders</strong> with the 📁+ button in the toolbar. Set a name and color.<br />
+    • <strong>Drag a gate button onto a folder button</strong> to move it in. Drag a gate from a folder to the toolbar to make it loose.<br />
+    • <strong>Right-click a folder</strong> to rename, recolor, or delete it.<br />
     • <strong>Right-click a custom gate</strong> (toolbar or canvas) to edit it.<br />
     • <strong>Shift+drag</strong> to box-select, <strong>Shift+click</strong> to multi-select.<br />
     • <strong>Click an output port</strong> to enter pour mode (orange), click inputs to wire.<br />
@@ -267,15 +313,18 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
    STATE
    ═══════════════════════════════════════════════════════════════ */
 let components=[],wires=[],customContainers=[],savedCustomGates={};
+let savedFolders={};                     /* { name: {name,color} } */
+let toastsEnabled=localStorage.getItem('toasts_enabled')!=='false';
 let draggingWire=null,nextId=1,isPaused=false;
 let panX=0,panY=0,zoom=1,isPanning=false,startPanX=0,startPanY=0;
 let initialPinchDistance=null,initialZoom=1;
-let ghostType=null,wirePouringState=null;
+let ghostType=null,ghostSourceFolder='',wirePouringState=null;
 let selectedIds=new Set(),isBoxSelecting=false;
 let boxSelectStartX=0,boxSelectStartY=0,boxSelectStartScreenX=0,boxSelectStartScreenY=0;
 let selectedSourceIndex=0,lastSelectionSignature='';
 let clipboard=null,cursorCanvasX=0,cursorCanvasY=0;
 let portPositions={},portPositionsDirty=true,zoomThrottleTimer=null;
+let openFolderName=null;
 
 const viewport=document.getElementById('viewport');
 const canvas=document.getElementById('canvas');
@@ -317,21 +366,11 @@ const SNAP=20;
 function snapValue(v){if(!document.getElementById('snapCheck').checked)return v;return Math.round(v/SNAP)*SNAP}
 function snapPos(x,y){return{x:snapValue(x),y:snapValue(y)}}
 
-/* ─── timing core ─────────────────────────────────────────────
-   The simulation ticks every TICK_MS milliseconds.  All user-facing
-   timing values (DELAY) are expressed in milliseconds and converted
-   to a whole number of ticks internally.                           */
+/* ─── timing core ───────────────────────────────────────────── */
 const TICK_MS=50;
-const MAX_TICKS=400;              /* 20 s ceiling */
-function delayTicksFor(comp){
-    const ms=Math.max(TICK_MS,Number(comp&&comp.delayMs)||150);
-    return Math.max(1,Math.min(MAX_TICKS,Math.round(ms/TICK_MS)));
-}
-function clockTicksFor(comp){
-    const ms=Math.max(TICK_MS,Number(comp&&comp.clockMs)||250);
-    return Math.max(1,Math.min(MAX_TICKS,Math.round(ms/TICK_MS)));
-}
-/* Resize the delay ring-buffer while preserving the most recent samples. */
+const MAX_TICKS=400;
+function delayTicksFor(comp){const ms=Math.max(TICK_MS,Number(comp&&comp.delayMs)||150);return Math.max(1,Math.min(MAX_TICKS,Math.round(ms/TICK_MS)))}
+function clockTicksFor(comp){const ms=Math.max(TICK_MS,Number(comp&&comp.clockMs)||250);return Math.max(1,Math.min(MAX_TICKS,Math.round(ms/TICK_MS)))}
 function ensureDelayQueue(comp){
     const n=delayTicksFor(comp);
     const old=Array.isArray(comp.delayQueue)?comp.delayQueue:[];
@@ -343,37 +382,22 @@ function ensureDelayQueue(comp){
     }
     return comp.delayQueue;
 }
-
-/* ─── helper to initialize a component's `inputs` array based on its type ─── */
 function initComponentInputs(comp){
     if(!comp)return;
     const t=comp.type;
-    if(comp.isCustom){
-        comp.inputs=new Array((comp.def&&comp.def.inputsCount)||0).fill(0);
-    }else if(t==='INPUT'||t==='OUTPUT'||t==='SCREEN'||t==='PUSH'||t==='NOT'||t==='DELAY'||t==='COLOR'||t==='PULSE'||t==='CLOCK'){
-        comp.inputs=[0];
-    }else{
-        comp.inputs=[0,0];
-    }
-    // ── DELAY: milliseconds-based, backed by a tick queue ──
+    if(comp.isCustom){comp.inputs=new Array((comp.def&&comp.def.inputsCount)||0).fill(0);}
+    else if(t==='INPUT'||t==='OUTPUT'||t==='SCREEN'||t==='PUSH'||t==='NOT'||t==='DELAY'||t==='COLOR'||t==='PULSE'||t==='CLOCK'){comp.inputs=[0];}
+    else{comp.inputs=[0,0];}
     if(t==='DELAY'){
-        if(comp.delayMs===undefined||comp.delayMs===null){
-            // migrate legacy tick-based value (1 old tick ≈ 50 ms)
-            comp.delayMs=(Number(comp.delayVal)||3)*TICK_MS;
-        }
+        if(comp.delayMs===undefined||comp.delayMs===null)comp.delayMs=(Number(comp.delayVal)||3)*TICK_MS;
         comp.delayMs=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,Math.round(comp.delayMs)));
         ensureDelayQueue(comp);
     }
-    // ── CLOCK ──
     if(t==='CLOCK'){
-        if(comp.clockMs===undefined||comp.clockMs===null){
-            // migrate legacy tick-based value (1 old tick ≈ 50 ms)
-            comp.clockMs=(Number(comp.clockVal)||5)*TICK_MS;
-        }
+        if(comp.clockMs===undefined||comp.clockMs===null)comp.clockMs=(Number(comp.clockVal)||5)*TICK_MS;
         comp.clockMs=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,Math.round(comp.clockMs)));
         comp.clockCounter=comp.clockCounter||0;
     }
-    // ── PULSE (one-shot) ──
     if(t==='PULSE'){
         comp.pulseCounter=comp.pulseCounter||0;
         comp.pulsePrevInput=comp.pulsePrevInput||0;
@@ -382,12 +406,26 @@ function initComponentInputs(comp){
     }
 }
 
-/* toast / confirm / prompt */
+/* ─── toast / confirm / prompt ───────────────────────────────── */
 function showToast(m,t='info',d=2500){
+    if(!toastsEnabled)return;
     const c=document.getElementById('toast-container'),el=document.createElement('div');
     el.className=`toast ${t}`;
     el.innerHTML=`<span class="toast-close" onclick="this.parentElement.remove()">✕</span>${m}`;
     c.appendChild(el);setTimeout(()=>{if(el.parentElement)el.remove()},d);el.addEventListener('click',()=>el.remove());
+}
+function toggleToasts(){
+    toastsEnabled=!toastsEnabled;
+    localStorage.setItem('toasts_enabled',toastsEnabled?'true':'false');
+    updateToastButton();
+    if(toastsEnabled)showToast('Notifications enabled','success',1200);
+}
+function updateToastButton(){
+    const b=document.getElementById('toast-btn');
+    if(!b)return;
+    b.textContent=toastsEnabled?'🔔':'🔕';
+    b.style.opacity=toastsEnabled?'1':'0.55';
+    b.title=toastsEnabled?'Notifications ON (click to disable)':'Notifications OFF (click to enable)';
 }
 let confirmResolve=null,promptResolve=null;
 function showConfirm(t,m){return new Promise(r=>{document.getElementById('confirm-title').textContent=t;document.getElementById('confirm-message').textContent=m;confirmResolve=r;document.getElementById('confirm-modal').style.display='flex'})}
@@ -397,11 +435,81 @@ function showPrompt(t,m,dv){return new Promise(r=>{document.getElementById('prom
 function closePrompt(r){document.getElementById('prompt-modal').style.display='none';const v=r?document.getElementById('prompt-input').value:null;if(promptResolve){promptResolve(v);promptResolve=null}}
 function closePromptOutside(e){if(e.target.id==='prompt-modal')closePrompt(false)}
 
+/* ─── folder dialog ──────────────────────────────────────────── */
+let folderDialogResolve=null;
+function openFolderDialog(existingName,existingColor){
+    const modal=document.getElementById('folder-modal');
+    document.getElementById('folder-modal-title').textContent=existingName?'Edit Folder':'New Folder';
+    document.getElementById('folder-modal-message').textContent=existingName?'Change the folder\'s name or color.':'Choose a name and color for the folder.';
+    document.getElementById('folder-name-input').value=existingName||'';
+    document.getElementById('folder-color-input').value=existingColor||'#475569';
+    modal.style.display='flex';
+    return new Promise(r=>{
+        folderDialogResolve=r;
+        setTimeout(()=>{const inp=document.getElementById('folder-name-input');inp.focus();inp.select()},50);
+    });
+}
+function closeFolderDialog(ok){
+    document.getElementById('folder-modal').style.display='none';
+    if(folderDialogResolve){
+        const r=folderDialogResolve;folderDialogResolve=null;
+        if(ok){
+            r({name:document.getElementById('folder-name-input').value.trim(),color:document.getElementById('folder-color-input').value});
+        }else r(null);
+    }
+}
+function closeFolderDialogOutside(e){if(e.target.id==='folder-modal')closeFolderDialog(false)}
+async function createNewFolder(){
+    const res=await openFolderDialog();
+    if(!res)return;
+    if(!res.name){showToast('Please enter a folder name.','error');return}
+    if(savedFolders[res.name]||Object.keys(savedFolders).some(n=>n.toLowerCase()===res.name.toLowerCase())){
+        showToast('A folder with that name already exists.','error');return;
+    }
+    savedFolders[res.name]={name:res.name,color:res.color};
+    forceSaveState();updateCustomGatesToolbar();
+    showToast(`Folder "${res.name}" created.`,'success',1500);
+}
+async function editFolder(oldName){
+    const cur=savedFolders[oldName]||{name:oldName,color:'#475569'};
+    const res=await openFolderDialog(cur.name,cur.color);
+    if(!res)return;
+    if(!res.name){showToast('Please enter a folder name.','error');return}
+    if(res.name!==oldName&&savedFolders[res.name]){showToast('A folder with that name already exists.','error');return}
+    if(res.name!==oldName){
+        savedFolders[res.name]={name:res.name,color:res.color};
+        delete savedFolders[oldName];
+        Object.keys(savedCustomGates).forEach(n=>{
+            if((savedCustomGates[n].folder||'').trim()===oldName)savedCustomGates[n].folder=res.name;
+        });
+    }else{
+        savedFolders[oldName].color=res.color;
+    }
+    forceSaveState();updateCustomGatesToolbar();
+    showToast('Folder updated.','success',1500);
+}
+function moveGateToFolder(gateName,folderName){
+    const def=savedCustomGates[gateName];if(!def)return;
+    const target=(folderName||'').trim();
+    if(target&&!savedFolders[target])savedFolders[target]={name:target,color:'#475569'};
+    if((def.folder||'')===target)return;
+    def.folder=target;
+    forceSaveState();updateCustomGatesToolbar();
+    if(target)showToast(`"${gateName}" → folder "${target}"`,'success',1500);
+    else showToast(`"${gateName}" removed from folder.`,'info',1500);
+}
+
 /* undo/redo */
-function _snap(){return{components:JSON.parse(JSON.stringify(components)),wires:JSON.parse(JSON.stringify(wires)),customContainers:JSON.parse(JSON.stringify(customContainers)),savedCustomGates:JSON.parse(JSON.stringify(savedCustomGates))}}
+function _snap(){return{
+    components:JSON.parse(JSON.stringify(components)),
+    wires:JSON.parse(JSON.stringify(wires)),
+    customContainers:JSON.parse(JSON.stringify(customContainers)),
+    savedCustomGates:JSON.parse(JSON.stringify(savedCustomGates)),
+    savedFolders:JSON.parse(JSON.stringify(savedFolders))
+}}
 function saveState(){if(isUndoRedo)return;const n=Date.now();if(n-lastSaveTime<SAVE_DEBOUNCE)return;lastSaveTime=n;undoStack.push(_snap());if(undoStack.length>MAX_HISTORY)undoStack.shift();redoStack=[];updateUndoRedoButtons();saveToLocalStorage()}
 function forceSaveState(){if(isUndoRedo)return;undoStack.push(_snap());if(undoStack.length>MAX_HISTORY)undoStack.shift();redoStack=[];updateUndoRedoButtons();saveToLocalStorage();lastSaveTime=Date.now()}
-function restoreState(s){isUndoRedo=true;components.forEach(c=>{const el=document.getElementById(`comp-${c.id}`);if(el)el.remove()});customContainers.forEach(c=>{const el=document.getElementById(`container-${c.id}`);if(el)el.remove()});components=s.components;wires=s.wires;customContainers=s.customContainers;savedCustomGates=s.savedCustomGates;updateCustomGatesToolbar();components.forEach(c=>renderComponent(c));customContainers.forEach(c=>renderCustomContainer(c));drawWires();runSimulation();isUndoRedo=false;markPortPositionsDirty();updateUndoRedoButtons()}
+function restoreState(s){isUndoRedo=true;components.forEach(c=>{const el=document.getElementById(`comp-${c.id}`);if(el)el.remove()});customContainers.forEach(c=>{const el=document.getElementById(`container-${c.id}`);if(el)el.remove()});components=s.components;wires=s.wires;customContainers=s.customContainers;savedCustomGates=s.savedCustomGates;savedFolders=s.savedFolders||{};updateCustomGatesToolbar();components.forEach(c=>renderComponent(c));customContainers.forEach(c=>renderCustomContainer(c));drawWires();runSimulation();isUndoRedo=false;markPortPositionsDirty();updateUndoRedoButtons()}
 function undo(){if(!undoStack.length)return;redoStack.push(_snap());restoreState(undoStack.pop());showToast('Undo','info',1000)}
 function redo(){if(!redoStack.length)return;undoStack.push(_snap());restoreState(redoStack.pop());showToast('Redo','info',1000)}
 function updateUndoRedoButtons(){const u=document.getElementById('undo-btn'),r=document.getElementById('redo-btn');if(u)u.disabled=!undoStack.length;if(r)r.disabled=!redoStack.length}
@@ -415,8 +523,31 @@ function updatePortPositions(){
     portPositions=np;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   INFINITE BACKGROUND GRID
+   ═══════════════════════════════════════════════════════════════ */
+const GRID_UNIT=20;
+const GRID_MIN_PX=10;
+function updateGridBackground(){
+    const gs=Math.max(GRID_MIN_PX,GRID_UNIT*zoom);
+    const half=gs/2;
+    const bx=(((panX-half)%gs)+gs)%gs;
+    const by=(((panY-half)%gs)+gs)%gs;
+    viewport.style.backgroundSize=gs+'px '+gs+'px';
+    viewport.style.backgroundPosition=bx+'px '+by+'px';
+}
+function updateModalGridBackground(){
+    const vp=document.getElementById('custom-gate-modal-viewport');if(!vp)return;
+    const gs=Math.max(GRID_MIN_PX,GRID_UNIT*modalZoom);
+    const half=gs/2;
+    const bx=(((modalPanX-half)%gs)+gs)%gs;
+    const by=(((modalPanY-half)%gs)+gs)%gs;
+    vp.style.backgroundSize=gs+'px '+gs+'px';
+    vp.style.backgroundPosition=bx+'px '+by+'px';
+}
+
 /* transform */
-function updateTransform(){canvas.style.transform=`translate(${panX}px,${panY}px) scale(${zoom})`}
+function updateTransform(){canvas.style.transform=`translate(${panX}px,${panY}px) scale(${zoom})`;updateGridBackground()}
 function applyZoom(nz,ox,oy){nz=Math.max(.1,Math.min(5,nz));const r=viewport.getBoundingClientRect();const mx=ox-r.left,my=oy-r.top;panX=mx-(mx-panX)*(nz/zoom);panY=my-(my-panY)*(nz/zoom);zoom=nz;updateTransform();if(zoomThrottleTimer)cancelAnimationFrame(zoomThrottleTimer);zoomThrottleTimer=requestAnimationFrame(()=>{zoomThrottleTimer=null;markPortPositionsDirty();drawWires();saveToLocalStorage()})}
 function startPan(e){if(e.target.closest('.gate')||e.target.closest('.custom-container-wrapper')||e.target.closest('#toolbar'))return;if(e.shiftKey){startBoxSelect(e);e.stopPropagation();return}if(!e.shiftKey&&selectedIds.size)clearSelection();isPanning=true;startPanX=e.clientX-panX;startPanY=e.clientY-panY;e.stopPropagation()}
 function startTouchPanZoom(e){if(e.target.closest('.gate')||e.target.closest('.custom-container-wrapper')||e.target.closest('#toolbar'))return;if(e.touches.length===2){initialPinchDistance=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);initialZoom=zoom;isPanning=false}else if(e.touches.length===1){isPanning=true;startPanX=e.touches[0].clientX-panX;startPanY=e.touches[0].clientY-panY}e.stopPropagation()}
@@ -477,8 +608,8 @@ function pasteAtCursor(){
 }
 
 /* ghost drag (main) */
-function startGhostDrag(e,type){
-    e.preventDefault();ghostType=type;
+function startGhostDrag(e,type,sourceFolder){
+    e.preventDefault();ghostType=type;ghostSourceFolder=sourceFolder||'';
     let ht=type,bc='',w=140,h='auto',gc='#6f42c1';
     if(savedCustomGates[type]){
         const d=savedCustomGates[type];gc=d.color||'#6f42c1';
@@ -534,6 +665,25 @@ window.addEventListener('touchmove',e=>{
     if(e.touches.length===1){const t=e.touches[0];if(isPanning){panX=t.clientX-startPanX;panY=t.clientY-startPanY;updateTransform();markPortPositionsDirty()}handleMove(t.clientX,t.clientY)}
 },{passive:false});
 
+/* highlight folder under cursor during a custom-gate ghost drag */
+let lastDragOverFolder=null;
+function updateFolderDragHover(cx,cy){
+    if(!ghostType||!savedCustomGates[ghostType]){
+        if(lastDragOverFolder){lastDragOverFolder.classList.remove('drag-over');lastDragOverFolder=null}
+        return;
+    }
+    const el=document.elementFromPoint(cx,cy);
+    const btn=el&&el.closest?el.closest('.gate-folder-btn'):null;
+    if(btn!==lastDragOverFolder){
+        if(lastDragOverFolder)lastDragOverFolder.classList.remove('drag-over');
+        if(btn)btn.classList.add('drag-over');
+        lastDragOverFolder=btn;
+    }
+}
+function clearFolderDragHover(){
+    if(lastDragOverFolder){lastDragOverFolder.classList.remove('drag-over');lastDragOverFolder=null}
+}
+
 function handleMove(cx,cy){
     const r=viewport.getBoundingClientRect();
     cursorCanvasX=(cx-r.left-panX)/zoom;cursorCanvasY=(cy-r.top-panY)/zoom;
@@ -542,6 +692,7 @@ function handleMove(cx,cy){
         if(savedCustomGates[ghostType]){const d=savedCustomGates[ghostType];h=Math.max(50,Math.max((d.inputInitials||[]).length,(d.outputInitials||[]).length)*22+12)}
         if(ghostType==='SCREEN'){w=40;h=40}
         updateGhostPosition(cx,cy,w,h);
+        updateFolderDragHover(cx,cy);
     }
     if(draggingWire)updateTempWire(cx,cy);
 }
@@ -552,14 +703,26 @@ function handleEnd(cx,cy){
     if(isPanning)saveToLocalStorage();isPanning=false;
     if(ghostType){
         ghostGate.style.display='none';
-        const r=viewport.getBoundingClientRect();
-        const x=parseFloat(ghostGate.dataset.canvasX)||0,y=parseFloat(ghostGate.dataset.canvasY)||0;
-        if(cx>=r.left&&cx<=r.right&&cy>=r.top&&cy<=r.bottom){
-            if(savedCustomGates[ghostType])spawnCustomGateInstance(ghostType,x,y);
-            else spawnComponentAt(ghostType,x,y);
-            forceSaveState();
+        clearFolderDragHover();
+        const target=document.elementFromPoint(cx,cy);
+        const folderBtn=target&&target.closest?target.closest('.gate-folder-btn'):null;
+
+        if(folderBtn&&savedCustomGates[ghostType]){
+            /* dropped on a folder button → move gate into that folder */
+            moveGateToFolder(ghostType,folderBtn.dataset.folderName);
+        }else if(target&&target.closest('#toolbar')&&ghostSourceFolder&&savedCustomGates[ghostType]){
+            /* dropped on the toolbar area (not a folder) → make loose */
+            moveGateToFolder(ghostType,'');
+        }else{
+            const r=viewport.getBoundingClientRect();
+            if(cx>=r.left&&cx<=r.right&&cy>=r.top&&cy<=r.bottom){
+                const x=parseFloat(ghostGate.dataset.canvasX)||0,y=parseFloat(ghostGate.dataset.canvasY)||0;
+                if(savedCustomGates[ghostType])spawnCustomGateInstance(ghostType,x,y);
+                else spawnComponentAt(ghostType,x,y);
+                forceSaveState();
+            }
         }
-        ghostType=null;
+        ghostType=null;ghostSourceFolder='';
     }
     if(draggingWire){
         const t=document.elementFromPoint(cx,cy);
@@ -623,10 +786,12 @@ document.addEventListener('keydown',e=>{
             closeCustomGateModal(false);e.preventDefault();return;
         }
         if(wirePouringState){exitWirePouring();e.preventDefault();return}
+        closeGateFolderDropdown();closeFolderContextMenu();
+        const fm=document.getElementById('folder-modal');
+        if(fm&&fm.style.display==='flex'){closeFolderDialog(false);e.preventDefault();return}
     }
     const ctrl=e.ctrlKey||e.metaKey;
     if(mOpen){
-        // Modal copy/paste
         if(ctrl&&e.key==='c'){e.preventDefault();copyModalSelected();return}
         if(ctrl&&e.key==='v'){e.preventDefault();pasteModalAtCursor();return}
         if((e.key==='Delete'||e.key==='Backspace')&&modalSelectedIds.size&&document.activeElement?.tagName!=='INPUT'){
@@ -658,10 +823,14 @@ document.addEventListener('contextmenu',e=>{
         const cid=parseInt(t.getAttribute('data-comp')),pt=t.getAttribute('data-type'),pidx=parseInt(t.getAttribute('data-port'));
         if(!isNaN(cid)&&pt&&!isNaN(pidx)){e.preventDefault();e.stopPropagation();removeWireFromPort(cid,pt,pidx);return}
     }
+    const fe=t.closest('.gate-folder-btn');
+    if(fe){e.preventDefault();e.stopPropagation();showFolderContextMenu(fe.dataset.folderName,e.clientX,e.clientY);return}
+    const fi=t.closest('.gate-folder-item');
+    if(fi){e.preventDefault();e.stopPropagation();closeGateFolderDropdown();openCustomGateModal(fi.dataset.gateName,true);return}
     if(wirePouringState){exitWirePouring();e.preventDefault();return}
     const te=t.closest('#custom-gates-toolbar .tool-btn');
     if(te){
-        const gt=te.textContent.trim();
+        const gt=te.dataset.gateName;
         if(gt&&savedCustomGates[gt]){e.preventDefault();e.stopPropagation();openCustomGateModal(gt,true);return}
     }
     const ge=t.closest('.gate');
@@ -671,6 +840,12 @@ document.addEventListener('contextmenu',e=>{
         const c=components.find(c=>c.id===cid);
         if(c&&c.isCustom)openCustomGateModal(c.type,true);
     }
+});
+
+/* close floating panels on any outside click */
+document.addEventListener('mousedown',e=>{
+    if(!e.target.closest('#gate-folder-dropdown')&&!e.target.closest('.gate-folder-btn'))closeGateFolderDropdown();
+    if(!e.target.closest('#folder-context-menu'))closeFolderContextMenu();
 });
 
 /* spawn */
@@ -758,7 +933,6 @@ function attachPortHandlers(el,which){
     const getPourState=()=>isMain?wirePouringState:modalWirePouringState;
     const setPourState=v=>{if(isMain)wirePouringState=v;else modalWirePouringState=v};
 
-    // ── Output ports ──
     el.querySelectorAll('.port.output, .pixel-square .port.output').forEach(portEl=>{
         const onDown=e=>{
             e.stopPropagation();e.preventDefault();
@@ -790,7 +964,6 @@ function attachPortHandlers(el,which){
                 const cx=isTouch?(ev.changedTouches?ev.changedTouches[0].clientX:0):ev.clientX;
                 const cy=isTouch?(ev.changedTouches?ev.changedTouches[0].clientY:0):ev.clientY;
                 if(!didDrag){
-                    // enter pour mode
                     const ds=getPourState();
                     if(ds&&ds.compId===cid&&ds.portIndex===pidx){
                         if(isMain)exitWirePouring();else exitModalWirePouring();
@@ -835,7 +1008,6 @@ function attachPortHandlers(el,which){
         portEl.addEventListener('touchstart',onDown,{passive:false});
     });
 
-    // ── Input ports ──
     el.querySelectorAll('.port:not(.output), .pixel-square .port:not(.output)').forEach(portEl=>{
         const onClick=e=>{
             const cid=parseInt(portEl.getAttribute('data-comp'));
@@ -978,8 +1150,6 @@ function evaluateGate(comp,inputs){
     if(comp.type==='OUTPUT'||comp.type==='SCREEN'||comp.type==='COLOR')return inputs[0];
     if(comp.type==='CLOCK')return comp.state||0;
     if(comp.type==='PULSE')return comp.state||0;
-    /* DELAY is advanced only by the simulation tick — reading here keeps
-       the solver deterministic and stops the double-shift bug. */
     if(comp.type==='DELAY'){ensureDelayQueue(comp);return comp.outputVal||0}
     return 0;
 }
@@ -987,7 +1157,6 @@ function evaluateCustomGate(comp){
     const sub=comp.subComps||[];const sw=comp.subWires||[];
     if(!sub.length){comp.outputsArray=new Array((comp.def&&comp.def.outputsCount)||0).fill(0);comp.outputVal=0;return}
     const byId=new Map();for(const sc of sub)byId.set(sc.id,sc);
-    // ★ Ensure every sub-component has a valid inputs array. Defensive but necessary for old-format gates.
     sub.forEach(sc=>{if(!Array.isArray(sc.inputs))initComponentInputs(sc)});
     const inputs=sub.filter(sc=>sc.type==='INPUT'||sc.type==='PUSH').sort((a,b)=>a.y-b.y);
     for(let i=0;i<inputs.length;i++){const ic=inputs[i];const v=(comp.inputs&&comp.inputs[i]===1)?1:0;ic.state=v;ic.outputVal=v}
@@ -1007,14 +1176,9 @@ function evaluateCustomGate(comp){
                 else ins[i]=src.outputVal||0;
             }
             sc.inputs=ins;
-            /* nested clock / pulse: inputs latched here, output driven by tick */
             if(sc.type==='CLOCK'||sc.type==='PULSE')continue;
             if(sc.isCustom)evaluateCustomGate(sc);
-            else if(sc.type==='DELAY'){
-                /* read-only — the tick advances nested delay buffers */
-                const st=comp.delayStates&&comp.delayStates[sc.id];
-                sc.outputVal=st?(st.queue[st.ptr]||0):0;
-            }
+            else if(sc.type==='DELAY'){const st=comp.delayStates&&comp.delayStates[sc.id];sc.outputVal=st?(st.queue[st.ptr]||0):0;}
             else sc.outputVal=evaluateGate(sc,ins);
             const oc=oldOut!==sc.outputVal;
             const ocs=sc.outputsArray&&(oldOutputs.length!==sc.outputsArray.length||oldOutputs.some((v,i)=>v!==sc.outputsArray[i]));
@@ -1029,7 +1193,6 @@ function tickClocksMain(comps){
     comps.forEach(comp=>{
         if(comp.type==='CLOCK'){
             if(!Array.isArray(comp.inputs)||comp.inputs.length<1)comp.inputs=[0];
-            /* gated oscillator – identical behaviour to the old PULSE */
             if(!(comp.inputs[0]?1:0)){comp.clockCounter=0;comp.state=0;comp.outputVal=0;return}
             const p=clockTicksFor(comp);
             comp.clockCounter=(comp.clockCounter||0)+1;
@@ -1070,8 +1233,6 @@ function runGenericSimulation(comps,wr,updateFn){
                 else ins[i]=src.outputVal||0;
             }
             comp.inputs=ins;
-            /* CLOCK/PULSE have an input (they're gated / edge-triggered) but
-               their output is always produced by the tick, never the solver. */
             if(comp.type==='CLOCK'||comp.type==='PULSE')continue;
             if(comp.isCustom)evaluateCustomGate(comp);
             else comp.outputVal=evaluateGate(comp,ins);
@@ -1085,31 +1246,20 @@ function runGenericSimulation(comps,wr,updateFn){
 function runSimulation(){runGenericSimulation(components,wires,updateVisuals)}
 function runModalSimulation(){runGenericSimulation(modalComponents,modalWires,updateModalVisuals)}
 
-/* ── DELAY (ms) ─────────────────────────────────────────────── */
 function tickDelayComponent(comp){
     const q=ensureDelayQueue(comp);
     comp.outputVal=q[0]?1:0;
     q.shift();
     q.push((comp.inputs&&comp.inputs[0])?1:0);
 }
-/* ── PULSE (one-shot) ───────────────────────────────────────── */
-/* A rising edge on the input drives the output high for exactly one tick,
-   then it falls back to 0. It will not fire again until the input goes low
-   and then high again. */
 function tickPulseComponent(comp){
     const inp=(comp.inputs&&comp.inputs[0])?1:0;
     const prev=comp.pulsePrevInput?1:0;
-    if(inp===1&&prev===0){
-        comp.state=1;
-        comp.pulseCounter=1;
-    }else if((comp.pulseCounter||0)>0){
-        comp.pulseCounter--;
-        if(comp.pulseCounter<=0){comp.pulseCounter=0;comp.state=0}
-    }
+    if(inp===1&&prev===0){comp.state=1;comp.pulseCounter=1;}
+    else if((comp.pulseCounter||0)>0){comp.pulseCounter--;if(comp.pulseCounter<=0){comp.pulseCounter=0;comp.state=0}}
     comp.pulsePrevInput=inp;
     comp.outputVal=comp.state?1:0;
 }
-/* Recursively advance DELAY / PULSE components nested inside custom gates. */
 function tickNestedTiming(container){
     (container.subComps||[]).forEach(sc=>{
         if(sc.type==='DELAY'){
@@ -1123,11 +1273,8 @@ function tickNestedTiming(container){
             sc.outputVal=st.queue[st.ptr]?1:0;
             st.queue[st.ptr]=(sc.inputs&&sc.inputs[0])?1:0;
             st.ptr=(st.ptr+1)%n;
-        }else if(sc.type==='PULSE'){
-            tickPulseComponent(sc);
-        }else if(sc.isCustom){
-            tickNestedTiming(sc);
-        }
+        }else if(sc.type==='PULSE'){tickPulseComponent(sc);}
+        else if(sc.isCustom){tickNestedTiming(sc);}
     });
 }
 function tickAll(){
@@ -1259,13 +1406,170 @@ function updateModalPortPositions(){
     modalPortPositions=np;
 }
 
-/* custom gates toolbar */
-function updateCustomGatesToolbar(){
-    const g=document.getElementById('custom-gates-toolbar');if(!g)return;g.innerHTML='';
-    for(const name of Object.keys(savedCustomGates)){
-        const b=document.createElement('div');b.className='tool-btn';b.style.background=(savedCustomGates[name].color||'#6f42c1');b.innerText=name;b.dataset.gateName=name;
-        b.onmousedown=e=>startGhostDrag(e,name);b.ontouchstart=e=>startGhostDrag(e,name);g.appendChild(b);
+/* ═══════════════════════════════════════════════════════════════
+   CUSTOM-GATE FOLDERS  (auto-sorted toolbar)
+   ═══════════════════════════════════════════════════════════════ */
+function escapeHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function gateNameComparator(a,b){return a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'})}
+function getFolderColor(name){return (savedFolders[name]&&savedFolders[name].color)||'#475569'}
+
+/* Map(folderName -> sorted gate names), includes empty folders. */
+function getGateFolders(){
+    const map=new Map();
+    Object.keys(savedFolders).forEach(f=>map.set(f,[]));
+    Object.keys(savedCustomGates).forEach(n=>{
+        const f=(savedCustomGates[n].folder||'').trim();
+        if(!f)return;
+        if(!map.has(f))map.set(f,[]);
+        map.get(f).push(n);
+    });
+    [...map.values()].forEach(arr=>arr.sort(gateNameComparator));
+    return map;
+}
+function getFolderNamesSorted(){return [...getGateFolders().keys()].sort(gateNameComparator)}
+
+function closeGateFolderDropdown(){
+    const dd=document.getElementById('gate-folder-dropdown');
+    if(dd)dd.remove();
+    document.querySelectorAll('.gate-folder-btn.active').forEach(b=>b.classList.remove('active'));
+    openFolderName=null;
+}
+function toggleGateFolder(folderName,btnEl){
+    if(openFolderName===folderName){closeGateFolderDropdown();return}
+    closeGateFolderDropdown();
+    openFolderName=folderName;
+    btnEl.classList.add('active');
+
+    const dd=document.createElement('div');
+    dd.id='gate-folder-dropdown';
+    const names=getGateFolders().get(folderName)||[];
+    if(!names.length){
+        const e=document.createElement('div');
+        e.className='gate-folder-empty';
+        e.textContent='(empty — drag gates here)';
+        dd.appendChild(e);
     }
+    names.forEach(n=>{
+        const def=savedCustomGates[n];
+        const it=document.createElement('div');
+        it.className='gate-folder-item';
+        it.dataset.gateName=n;
+        it.title='Drag onto canvas to place • drag onto another folder to move • drag onto toolbar to make loose • right-click to edit';
+        it.innerHTML=`<span class="gf-dot" style="background:${def.color||'#6f42c1'}"></span><span class="gf-name">${escapeHtml(n)}</span>`;
+        const start=e=>{
+            if(e.button!==undefined&&e.button!==0)return;
+            e.preventDefault();e.stopPropagation();
+            closeGateFolderDropdown();
+            startGhostDrag(e,n,folderName);
+        };
+        it.addEventListener('mousedown',start);
+        it.addEventListener('touchstart',start,{passive:false});
+        dd.appendChild(it);
+    });
+    document.body.appendChild(dd);
+
+    const r=btnEl.getBoundingClientRect();
+    const w=dd.offsetWidth,h=dd.offsetHeight;
+    dd.style.left=Math.max(4,Math.min(r.left,window.innerWidth-w-6))+'px';
+    dd.style.top=Math.max(4,Math.min(r.bottom+4,window.innerHeight-h-6))+'px';
+}
+
+/* folder context menu */
+function closeFolderContextMenu(){const m=document.getElementById('folder-context-menu');if(m)m.remove()}
+function showFolderContextMenu(folderName,x,y){
+    closeGateFolderDropdown();
+    closeFolderContextMenu();
+    const m=document.createElement('div');
+    m.id='folder-context-menu';
+    m.innerHTML=
+        `<div class="fcm-item" data-act="edit">✎&nbsp; Edit folder (name &amp; color)</div>`+
+        `<div class="fcm-item" data-act="ungroup">↩&nbsp; Remove folder (keep gates)</div>`+
+        `<div class="fcm-item fcm-danger" data-act="delete">🗑&nbsp; Delete folder and gates</div>`;
+    document.body.appendChild(m);
+    m.style.left=Math.max(4,Math.min(x,window.innerWidth-m.offsetWidth-6))+'px';
+    m.style.top=Math.max(4,Math.min(y,window.innerHeight-m.offsetHeight-6))+'px';
+    m.addEventListener('mousedown',e=>e.stopPropagation());
+    m.addEventListener('contextmenu',e=>e.preventDefault());
+    m.addEventListener('click',async e=>{
+        const item=e.target.closest('.fcm-item');
+        if(!item)return;
+        const act=item.dataset.act;
+        closeFolderContextMenu();
+        if(act==='edit'){
+            editFolder(folderName);
+        }else if(act==='ungroup'){
+            Object.keys(savedCustomGates).forEach(n=>{
+                if((savedCustomGates[n].folder||'').trim()===folderName)delete savedCustomGates[n].folder;
+            });
+            delete savedFolders[folderName];
+            forceSaveState();updateCustomGatesToolbar();
+            showToast('Folder removed — gates moved out.','info',1800);
+        }else if(act==='delete'){
+            const names=Object.keys(savedCustomGates).filter(n=>(savedCustomGates[n].folder||'').trim()===folderName);
+            const ok=await showConfirm('Delete Folder Contents',`Delete folder "${folderName}" and all ${names.length} gate(s) inside it?`);
+            if(!ok)return;
+            names.forEach(n=>deleteCustomGateByName(n));
+            delete savedFolders[folderName];
+            forceSaveState();updateCustomGatesToolbar();runSimulation();drawWires();markPortPositionsDirty();
+            showToast(`Folder "${folderName}" deleted.`,'success',2000);
+        }
+    });
+}
+
+/* toolbar */
+function updateCustomGatesToolbar(){
+    const g=document.getElementById('custom-gates-toolbar');
+    if(!g)return;
+    closeGateFolderDropdown();
+    closeFolderContextMenu();
+    g.innerHTML='';
+
+    /* + Folder button */
+    const addBtn=document.createElement('div');
+    addBtn.className='tool-btn folder-add-btn';
+    addBtn.style.background='#475569';
+    addBtn.title='Create a new folder';
+    addBtn.innerHTML='<span style="font-size:11px;">📁</span><span>+</span>';
+    addBtn.addEventListener('mousedown',e=>{e.preventDefault();e.stopPropagation()});
+    addBtn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();createNewFolder()});
+    addBtn.addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();createNewFolder()},{passive:false});
+    g.appendChild(addBtn);
+
+    const folderMap=getGateFolders();
+    const loose=Object.keys(savedCustomGates)
+        .filter(n=>!(savedCustomGates[n].folder||'').trim())
+        .sort(gateNameComparator);
+
+    [...folderMap.keys()].sort(gateNameComparator).forEach(folderName=>{
+        const names=folderMap.get(folderName);
+        const color=getFolderColor(folderName);
+        const b=document.createElement('div');
+        b.className='tool-btn gate-folder-btn';
+        b.dataset.folderName=folderName;
+        b.style.background=color;
+        b.title=`Folder: ${folderName}  (${names.length} gate${names.length===1?'':'s'})\nClick to open • right-click to edit • drop gates here to add them`;
+        b.innerHTML=`<span style="font-size:11px;">📁</span><span>${escapeHtml(folderName)}</span><span class="folder-count">${names.length}</span>`;
+        b.addEventListener('mousedown',e=>{
+            if(e.button!==0)return;
+            e.preventDefault();e.stopPropagation();
+            toggleGateFolder(folderName,b);
+        });
+        b.addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();toggleGateFolder(folderName,b)},{passive:false});
+        g.appendChild(b);
+    });
+
+    loose.forEach(name=>{
+        const def=savedCustomGates[name];
+        const b=document.createElement('div');
+        b.className='tool-btn';
+        b.style.background=def.color||'#6f42c1';
+        b.textContent=name;
+        b.dataset.gateName=name;
+        b.title='Drag onto the canvas • drag onto a folder to add it • right-click to edit';
+        b.onmousedown=e=>startGhostDrag(e,name);
+        b.ontouchstart=e=>startGhostDrag(e,name);
+        g.appendChild(b);
+    });
 }
 
 /* refresh all instances */
@@ -1293,7 +1597,7 @@ function refreshAllInstances(gateName,newDef){
                 newSc.y=old.y!==undefined?old.y:scDef.y;
                 newSc.customLabel=old.customLabel||'';
                 if(newSc.type==='DELAY'){newSc.delayQueue=(old.delayQueueRaw&&old.delayQueueRaw.length)?old.delayQueueRaw.slice():null}
-               if(newSc.type==='CLOCK'){newSc.clockCounter=old.clockCounter!==undefined?old.clockCounter:0;newSc.clockMs=old.clockMs||newSc.clockMs||(Number(newSc.clockVal)||5)*TICK_MS;newSc.state=old.state||0;newSc.outputVal=old.outputVal||0}
+                if(newSc.type==='CLOCK'){newSc.clockCounter=old.clockCounter!==undefined?old.clockCounter:0;newSc.clockMs=old.clockMs||newSc.clockMs||(Number(newSc.clockVal)||5)*TICK_MS;newSc.state=old.state||0;newSc.outputVal=old.outputVal||0}
                 if(newSc.type==='SCREEN'){newSc.pixelWidth=old.pixelWidth||40;newSc.pixelHeight=old.pixelHeight||40}
                 if(newSc.type==='COLOR')newSc.pixelColor=old.pixelColor||'#39ff14';
                 if(newSc.isCustom&&newSc.type&&savedCustomGates[newSc.type]){newSc.def=savedCustomGates[newSc.type];if(old.subComps)newSc.subComps=old.subComps;else newSc.subComps=JSON.parse(JSON.stringify(savedCustomGates[newSc.type].innerComps||[]));if(old.subWires)newSc.subWires=old.subWires;else newSc.subWires=(savedCustomGates[newSc.type].innerWires||[]).slice();if(old.delayStates)newSc.delayStates=old.delayStates;if(old.clockStates)newSc.clockStates=old.clockStates;if(old.outputsArray)newSc.outputsArray=old.outputsArray}
@@ -1314,8 +1618,7 @@ function refreshAllInstances(gateName,newDef){
         if(instance.clockStates){const ncs={};for(const sc of newSubComps)if(sc.type==='CLOCK'){const old=oldStateMap.get(sc.id);ncs[sc.id]={counter:(old&&old.clockCounter)||0,state:(old&&old.state)||0,period:clockTicksFor(sc)}}instance.clockStates=ncs}
         if(instance.outputsArray)instance.outputsArray=new Array(freshDef.outputsCount||0).fill(0);
         const el=document.getElementById(`comp-${instance.id}`);
-        if(el){el.remove();renderComponent(instance);const ne=document.getElementById(`comp-${instance.id}`);if(ne){ne.classList.add('gate-updating');setTimeout(()=>ne.classList.remove('gate-updating'),600)}}
-    }
+        if(el){el.remove();renderComponent(instance);const ne=document.getElementById(`comp-${instance.id}`);if(ne){ne.classList.add('gate-updating');setTimeout(()=>ne.classList.remove('gate-updating'),600)}}}
     for(const c of components)traverseAndRefresh(c);
     return updatedCount;
 }
@@ -1351,7 +1654,10 @@ function mergeImportedState(state){
             savedCustomGates[name]=cl;
         }
     }
-    // ★ Synthesize missing defs from the live component internals
+    const importedFolders=state.savedFolders||{};
+    for(const[name,def]of Object.entries(importedFolders)){
+        if(!savedFolders[name])savedFolders[name]={name,color:def.color||'#475569'};
+    }
     (state.components || []).forEach(comp => {
         if(comp.isCustom && comp.type && Array.isArray(comp.subComps) && comp.subComps.length > 0){
             const ex = savedCustomGates[comp.type];
@@ -1361,6 +1667,7 @@ function mergeImportedState(state){
                 savedCustomGates[comp.type] = {
                     name: comp.type,
                     color: (ex && ex.color) || (comp.def && comp.def.color) || '#6f42c1',
+                    folder: (ex && ex.folder) || '',
                     inputsCount:  (ex && ex.inputsCount)  || ins.length,
                     outputsCount: (ex && ex.outputsCount) || outs.length,
                     inputInitials: (ex && ex.inputInitials && ex.inputInitials.length)
@@ -1385,6 +1692,11 @@ function mergeImportedState(state){
             }
         }
     });
+    /* auto-register any folder strings referenced by gates */
+    Object.keys(savedCustomGates).forEach(n=>{
+        const f=(savedCustomGates[n].folder||'').trim();
+        if(f&&!savedFolders[f])savedFolders[f]={name:f,color:'#475569'};
+    });
     (state.components||[]).forEach(c=>{idMap[c.id]=nextId++});
     const nc=(state.components||[]).map(comp=>{
         const cl=JSON.parse(JSON.stringify(comp));cl.id=idMap[comp.id];
@@ -1406,12 +1718,13 @@ function mergeImportedState(state){
     updateCustomGatesToolbar();markPortPositionsDirty();runSimulation();drawWires();forceSaveState();
 }
 
-/* ─── Normalize an old-format custom gate definition so the editor can open it ─── */
+/* ─── Normalize an old-format custom gate definition ─── */
 function normalizeCustomGateDef(def){
     if(!def) return def;
 
     def.name    = def.name    || def.gateName  || def.title || 'Unnamed';
     def.color   = def.color   || def.gateColor || '#6f42c1';
+    def.folder  = (typeof def.folder === 'string') ? def.folder : '';
 
     if(!Array.isArray(def.innerComps)){
         if(Array.isArray(def.innerComponents))      def.innerComps = def.innerComponents;
@@ -1419,7 +1732,6 @@ function normalizeCustomGateDef(def){
         else if(Array.isArray(def.components))      def.innerComps = def.components;
         else                                        def.innerComps = [];
     }
-
     if(!Array.isArray(def.innerWires)){
         if(Array.isArray(def.innerConnections))     def.innerWires = def.innerConnections;
         else if(Array.isArray(def.subWires))        def.innerWires = def.subWires;
@@ -1427,7 +1739,6 @@ function normalizeCustomGateDef(def){
         else if(Array.isArray(def.connections))     def.innerWires = def.connections;
         else                                        def.innerWires = [];
     }
-
     def.inputInitials  = def.inputInitials  || def.inputLabels  || [];
     def.outputInitials = def.outputInitials || def.outputLabels || [];
     def.innerInputs    = def.innerInputs    || [];
@@ -1435,19 +1746,12 @@ function normalizeCustomGateDef(def){
 
     const idSet = new Set();
     def.innerComps.forEach(sc => {
-        if(sc.id === undefined || sc.id === null){
-            sc.id = 'orphan_' + Math.random().toString(36).slice(2,9);
-        }
+        if(sc.id === undefined || sc.id === null)sc.id = 'orphan_' + Math.random().toString(36).slice(2,9);
         idSet.add(sc.id);
-
         if(sc.isCustom){
             const dn = sc._defName || sc.type;
-            if(dn && savedCustomGates[dn]){
-                sc.type = dn; sc._defName = dn; sc.def = savedCustomGates[dn];
-            } else if(!sc.def){
-                sc.isCustom = false;
-                sc.type = sc.type || 'AND';
-            }
+            if(dn && savedCustomGates[dn]){sc.type = dn; sc._defName = dn; sc.def = savedCustomGates[dn];}
+            else if(!sc.def){sc.isCustom = false; sc.type = sc.type || 'AND';}
         }
         if(sc.x === undefined)             sc.x = 0;
         if(sc.y === undefined)             sc.y = 0;
@@ -1455,11 +1759,7 @@ function normalizeCustomGateDef(def){
         if(sc.outputVal === undefined)     sc.outputVal = 0;
         if(sc.customLabel === undefined)   sc.customLabel = '';
     });
-
-    def.innerWires = def.innerWires.filter(w =>
-        idSet.has(w.fromComp) && idSet.has(w.toComp)
-    );
-
+    def.innerWires = def.innerWires.filter(w => idSet.has(w.fromComp) && idSet.has(w.toComp));
     if(!def.inputInitials.length){
         def.inputInitials = def.innerComps
             .filter(c => c.type === 'INPUT' || c.type === 'PUSH')
@@ -1470,19 +1770,14 @@ function normalizeCustomGateDef(def){
             .filter(c => c.type === 'OUTPUT')
             .map(c => { const n = (c.customLabel || '').trim(); return n ? n.toUpperCase() : ''; });
     }
-    if(!def.inputsCount)
-        def.inputsCount  = def.inputInitials.length ||
-                           def.innerComps.filter(c => c.type === 'INPUT' || c.type === 'PUSH').length;
-    if(!def.outputsCount)
-        def.outputsCount = def.outputInitials.length ||
-                           def.innerComps.filter(c => c.type === 'OUTPUT').length;
-
+    if(!def.inputsCount)  def.inputsCount  = def.inputInitials.length || def.innerComps.filter(c => c.type === 'INPUT' || c.type === 'PUSH').length;
+    if(!def.outputsCount) def.outputsCount = def.outputInitials.length || def.innerComps.filter(c => c.type === 'OUTPUT').length;
     return def;
 }
 
 /* state serialization */
 function buildFullState(){
-    return{version:'3.5',components,wires,customContainers,savedCustomGates,nextId,panX,panY,zoom,isDark:document.body.classList.contains('dark-theme')};
+    return{version:'3.8',components,wires,customContainers,savedCustomGates,savedFolders,nextId,panX,panY,zoom,isDark:document.body.classList.contains('dark-theme')};
 }
 function saveToLocalStorage(){try{localStorage.setItem('logic_sim_save_state_v4',JSON.stringify(buildFullState()))}catch(_){}}
 function loadFromLocalStorage(){
@@ -1491,12 +1786,18 @@ function loadFromLocalStorage(){
         if(!raw)return false;
         const state=JSON.parse(raw);
         components=state.components||[];wires=state.wires||[];customContainers=state.customContainers||[];savedCustomGates=state.savedCustomGates||{};
+        savedFolders=state.savedFolders||{};
         nextId=state.nextId||1;panX=state.panX||0;panY=state.panY||0;zoom=state.zoom||1;
         if(state.isDark){document.body.classList.remove('light-theme');document.body.classList.add('dark-theme')}
         for(const name of Object.keys(savedCustomGates)){
             if(!savedCustomGates[name].name)savedCustomGates[name].name=name;
             normalizeCustomGateDef(savedCustomGates[name]);
         }
+        /* migrate: any gate's folder string must have an entry in savedFolders */
+        Object.keys(savedCustomGates).forEach(n=>{
+            const f=(savedCustomGates[n].folder||'').trim();
+            if(f&&!savedFolders[f])savedFolders[f]={name:f,color:'#475569'};
+        });
         components.forEach(comp => {
             if(comp.isCustom && comp.type && Array.isArray(comp.subComps) && comp.subComps.length > 0){
                 const ex = savedCustomGates[comp.type];
@@ -1506,6 +1807,7 @@ function loadFromLocalStorage(){
                     savedCustomGates[comp.type] = {
                         name: comp.type,
                         color: (ex && ex.color) || (comp.def && comp.def.color) || '#6f42c1',
+                        folder: (ex && ex.folder) || '',
                         inputsCount:  (ex && ex.inputsCount)  || ins.length,
                         outputsCount: (ex && ex.outputsCount) || outs.length,
                         inputInitials: (ex && ex.inputInitials && ex.inputInitials.length)
@@ -1529,6 +1831,11 @@ function loadFromLocalStorage(){
                 }
             }
         });
+        /* re-check after synthesizing defs */
+        Object.keys(savedCustomGates).forEach(n=>{
+            const f=(savedCustomGates[n].folder||'').trim();
+            if(f&&!savedFolders[f])savedFolders[f]={name:f,color:'#475569'};
+        });
         components.forEach(comp=>{
             if(comp.isCustom&&comp.type&&savedCustomGates[comp.type])comp.def=savedCustomGates[comp.type];
             if(comp.subComps)comp.subComps.forEach(sc=>{
@@ -1545,9 +1852,10 @@ function loadFromLocalStorage(){
 async function clearAll(){
     const ok=await showConfirm('Clear Everything','Are you sure you want to clear everything?');
     if(!ok)return;
-    components=[];wires=[];customContainers=[];savedCustomGates={};
+    components=[];wires=[];customContainers=[];savedCustomGates={};savedFolders={};
     selectedIds.clear();resetSelectionSourceIndex();
     if(wirePouringState)exitWirePouring();
+    closeGateFolderDropdown();closeFolderContextMenu();
     canvas.innerHTML='<div id="grid-bg" onmousedown="startPan(event)" ontouchstart="startTouchPanZoom(event)"></div><svg id="wires"><path id="temp-wire" d="" stroke="#e83e8c" stroke-width="3" stroke-dasharray="5,5" fill="none" visibility="hidden" /></svg>';
     svgWires=document.getElementById('wires');updateCustomGatesToolbar();resetWiring();markPortPositionsDirty();drawWires();
     localStorage.removeItem('logic_sim_save_state_v4');forceSaveState();showToast('All cleared.','info');
@@ -1570,6 +1878,13 @@ function openCustomGateModal(gateType,isEditing){
     const titleText=document.getElementById('custom-gate-modal-title-text');
     const nameInput=document.getElementById('custom-gate-name-input');
     const colorInput=document.getElementById('custom-gate-color-input');
+    const folderInput=document.getElementById('custom-gate-folder-input');
+
+    const dl=document.getElementById('custom-gate-folder-list');
+    if(dl){
+        dl.innerHTML='';
+        getFolderNamesSorted().forEach(f=>{const o=document.createElement('option');o.value=f;dl.appendChild(o)});
+    }
 
     const delBtn = document.getElementById('modal-delete-gate-btn');
     if (delBtn) delBtn.style.display = (isEditing && gateType && savedCustomGates[gateType]) ? 'inline-block' : 'none';
@@ -1582,6 +1897,7 @@ function openCustomGateModal(gateType,isEditing){
         titleText.textContent=`Edit Custom Gate: ${gateType}`;
         nameInput.value=def.name||gateType;
         colorInput.value=def.color||'#6f42c1';
+        if(folderInput)folderInput.value=def.folder||'';
         loadDefIntoModal(def, gateType);
         customGateModalIsEditing=true;customGateModalEditingType=gateType;
     }else{
@@ -1589,17 +1905,14 @@ function openCustomGateModal(gateType,isEditing){
         titleText.textContent='Create Custom Gate';
         nameInput.value='';
         colorInput.value='#6f42c1';
+        if(folderInput)folderInput.value='';
         if(selectedSources.length>0)loadSelectionIntoModal();
         customGateModalIsEditing=false;customGateModalEditingType=null;
     }
 
     modal.style.display='flex';
     markModalPortPositionsDirty();
-    requestAnimationFrame(()=>{
-        fitModalToContents();
-        drawModalWires();
-        runModalSimulation();
-    });
+    requestAnimationFrame(()=>{fitModalToContents();drawModalWires();runModalSimulation()});
     setTimeout(()=>{nameInput.focus();nameInput.setSelectionRange(0,nameInput.value.length)},80);
 }
 function closeCustomGateModal(result){
@@ -1607,36 +1920,28 @@ function closeCustomGateModal(result){
     if(result){
         const ni=document.getElementById('custom-gate-name-input');
         const ci=document.getElementById('custom-gate-color-input');
+        const fi=document.getElementById('custom-gate-folder-input');
         const gn=(ni.value||'').trim();
         const gc=ci.value||'#6f42c1';
+        const gf=fi?(fi.value||'').trim():'';
         if(!gn){showToast('Please enter a gate name.','error');return}
-        const ok=buildGateFromModal(gn,gc);
+        const ok=buildGateFromModal(gn,gc,gf);
         if(!ok)return;
     }
     modal.style.display='none';
     exitModalWirePouring();resetModalWiring();resetModalState();clearModalCanvas();
 }
 
-async function deleteCurrentCustomGate(){
-    if(!customGateModalIsEditing || !customGateModalEditingType){
-        showToast('Nothing to delete — this gate hasn\'t been saved yet.','info',2000);
-        return;
-    }
-    const gateName = customGateModalEditingType;
-    const ok = await showConfirm('Delete Custom Gate', `Delete "${gateName}" and all its instances everywhere?`);
-    if(!ok) return;
-
-    const removedIds = new Set();
+/* ── delete a custom gate everywhere ── */
+function deleteCustomGateByName(gateName){
     components = components.filter(c => {
         if(c.isCustom && c.type === gateName){
             const el = document.getElementById(`comp-${c.id}`);
             if(el) el.remove();
-            removedIds.add(c.id);
             return false;
         }
         return true;
     });
-
     (function stripNested(list){
         list.forEach(c => {
             if(c.subComps){
@@ -1650,24 +1955,27 @@ async function deleteCurrentCustomGate(){
             }
         });
     })(components);
-
     wires = wires.filter(w =>
         components.some(c => c.id === w.fromComp) &&
         components.some(c => c.id === w.toComp)
     );
-
     delete savedCustomGates[gateName];
-
-    closeCustomGateModal(false);
-
-    updateCustomGatesToolbar();
-    forceSaveState();
-    runSimulation();
-    drawWires();
-    markPortPositionsDirty();
-    showToast(`Custom gate "${gateName}" deleted.`, 'success', 2500);
 }
 
+async function deleteCurrentCustomGate(){
+    if(!customGateModalIsEditing || !customGateModalEditingType){
+        showToast('Nothing to delete — this gate hasn\'t been saved yet.','info',2000);
+        return;
+    }
+    const gateName = customGateModalEditingType;
+    const ok = await showConfirm('Delete Custom Gate', `Delete "${gateName}" and all its instances everywhere?`);
+    if(!ok) return;
+    deleteCustomGateByName(gateName);
+    closeCustomGateModal(false);
+    updateCustomGatesToolbar();
+    forceSaveState();runSimulation();drawWires();markPortPositionsDirty();
+    showToast(`Custom gate "${gateName}" deleted.`, 'success', 2500);
+}
 function closeCustomGateModalOutside(e){if(e.target.id==='custom-gate-modal')closeCustomGateModal(false)}
 
 function initModalSimulator(){setupModalToolbar();setupModalEventListeners()}
@@ -1695,22 +2003,28 @@ function setupModalToolbar(){
     const tb=document.getElementById('custom-gate-modal-toolbar');if(!tb)return;tb.innerHTML='';
     const std=[{type:'INPUT',label:'Toggle',color:'#2563eb'},{type:'PUSH',label:'Push',color:'#6c5ce7'},{type:'OUTPUT',label:'Output',color:'#f59e0b'},{type:'AND',label:'AND',color:'#16a34a'},{type:'OR',label:'OR',color:'#8b5cf6'},{type:'XOR',label:'XOR',color:'#ec4899'},{type:'NOT',label:'NOT',color:'#ef4444'},{type:'NAND',label:'NAND',color:'#0f766e'},{type:'NOR',label:'NOR',color:'#7c3aed'},{type:'XNOR',label:'XNOR',color:'#0891b2'},{type:'DELAY',label:'Delay',color:'#64748b'},{type:'CLOCK',label:'Clock',color:'#0d9488'},{type:'PULSE',label:'Pulse',color:'#f43f5e'},{type:'COLOR',label:'Color',color:'#db2777'},{type:'SCREEN',label:'Pixel',color:'#d97706'}];
     std.forEach(g=>{const b=document.createElement('div');b.className='tool-btn';b.style.background=g.color;b.textContent=g.label;b.onmousedown=e=>startModalGhostDrag(e,g.type);b.ontouchstart=e=>startModalGhostDrag(e,g.type);tb.appendChild(b)});
-    Object.keys(savedCustomGates).forEach(name=>{
-        const def=savedCustomGates[name];const b=document.createElement('div');b.className='tool-btn';b.style.background=def.color||'#6f42c1';b.textContent=name;b.onmousedown=e=>startModalGhostDrag(e,name);b.ontouchstart=e=>startModalGhostDrag(e,name);tb.appendChild(b);
+    const folderMap=getGateFolders();
+    const ordered=[];
+    [...folderMap.keys()].sort(gateNameComparator).forEach(f=>folderMap.get(f).forEach(n=>ordered.push({name:n,folder:f})));
+    Object.keys(savedCustomGates)
+        .filter(n=>!(savedCustomGates[n].folder||'').trim())
+        .sort(gateNameComparator)
+        .forEach(n=>ordered.push({name:n,folder:''}));
+    ordered.forEach(({name,folder})=>{
+        const def=savedCustomGates[name];
+        const b=document.createElement('div');b.className='tool-btn';b.style.background=def.color||'#6f42c1';
+        b.textContent=name;
+        b.title=folder?`Folder: ${folder}`:'';
+        b.onmousedown=e=>startModalGhostDrag(e,name);b.ontouchstart=e=>startModalGhostDrag(e,name);tb.appendChild(b);
     });
     const fitBtn=document.createElement('div');fitBtn.className='tool-btn';fitBtn.style.background='#4b5563';fitBtn.textContent='⤢ Fit';fitBtn.title='Zoom to fit the whole circuit';fitBtn.onclick=()=>fitModalToContents();tb.appendChild(fitBtn);
 }
 function setupModalEventListeners(){
     if(modalEventListenersAttached)return;modalEventListenersAttached=true;
     const vp=document.getElementById('custom-gate-modal-viewport');
-
     vp.addEventListener('mousedown',e=>{
         if(e.target.closest('.gate')||e.target.closest('.port'))return;
-        if(e.shiftKey){
-            startModalBoxSelect(e);
-            e.preventDefault();
-            return;
-        }
+        if(e.shiftKey){startModalBoxSelect(e);e.preventDefault();return}
         if(modalSelectedIds.size)clearModalSelection();
         modalIsPanning=true;modalStartPanX=e.clientX-modalPanX;modalStartPanY=e.clientY-modalPanY;e.preventDefault();
     });
@@ -1720,7 +2034,6 @@ function setupModalEventListeners(){
         if(e.touches.length===2){modalInitialPinchDistance=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);modalInitialZoom=modalZoom;modalIsPanning=false}
         else if(e.touches.length===1){modalIsPanning=true;modalStartPanX=e.touches[0].clientX-modalPanX;modalStartPanY=e.touches[0].clientY-modalPanY}
     },{passive:true});
-
     document.addEventListener('mousemove',handleModalDocMove);
     document.addEventListener('mouseup',handleModalDocUp);
     document.addEventListener('touchmove',handleModalDocTouchMove,{passive:false});
@@ -1758,9 +2071,7 @@ function finishModalBoxSelect(cx,cy){
     modalComponents.forEach(c=>{
         const el=document.getElementById(`modal-comp-${c.id}`);if(!el)return;
         const w=el.offsetWidth||140,h=el.offsetHeight||60;
-        if(c.x<MX&&(c.x+w)>mX&&c.y<MY&&(c.y+h)>mY){
-            modalSelectedIds.add(c.id);el.classList.add('selected');
-        }
+        if(c.x<MX&&(c.x+w)>mX&&c.y<MY&&(c.y+h)>mY){modalSelectedIds.add(c.id);el.classList.add('selected')}
     });
     modalSelectedSourceIndex=0;
 }
@@ -1798,10 +2109,7 @@ function pasteModalAtCursor(){
         if(cl.type==='DELAY'){cl.delayMs=cl.delayMs||(Number(cl.delayVal)||3)*TICK_MS;cl.delayQueue=null}
         if(cl.type==='CLOCK'){cl.clockMs=cl.clockMs||(Number(cl.clockVal)||5)*TICK_MS;cl.clockCounter=0;cl.state=0;cl.outputVal=0}
         if(cl.type==='PULSE'){cl.pulseCounter=0;cl.pulsePrevInput=0;cl.state=0;cl.outputVal=0}
-        if(cl.isCustom){
-            const dn=cl._defName||cl.type;
-            if(savedCustomGates[dn]){cl.def=savedCustomGates[dn];cl.type=dn}
-        }
+        if(cl.isCustom){const dn=cl._defName||cl.type;if(savedCustomGates[dn]){cl.def=savedCustomGates[dn];cl.type=dn}}
         initComponentInputs(cl);nc.push(cl);
     }
     const nw=modalClipboard.wires.map(w=>({fromComp:idMap[w.fromComp],fromPort:w.fromPort,toComp:idMap[w.toComp],toPort:w.toPort})).filter(w=>w.fromComp!==undefined&&w.toComp!==undefined);
@@ -1813,7 +2121,6 @@ function pasteModalAtCursor(){
     markModalPortPositionsDirty();drawModalWires();runModalSimulation();
     showToast(`Pasted ${nc.length} component${nc.length>1?'s':''}.`,'success',1500);
 }
-
 function handleModalDocMove(e){
     if(!isModalOpen())return;
     const vp=document.getElementById('custom-gate-modal-viewport');
@@ -1856,19 +2163,20 @@ function applyModalZoom(nz,ox,oy){
     modalPanX=mx-(mx-modalPanX)*(nz/modalZoom);modalPanY=my-(my-modalPanY)*(nz/modalZoom);modalZoom=nz;
     updateModalTransform();markModalPortPositionsDirty();drawModalWires();
 }
-function updateModalTransform(){const c=document.getElementById('custom-gate-modal-canvas');if(c)c.style.transform=`translate(${modalPanX}px,${modalPanY}px) scale(${modalZoom})`}
+function updateModalTransform(){
+    const c=document.getElementById('custom-gate-modal-canvas');
+    if(c)c.style.transform=`translate(${modalPanX}px,${modalPanY}px) scale(${modalZoom})`;
+    updateModalGridBackground();
+}
 function modalSnapValue(v){return Math.round(v/20)*20}
 function modalSnapPos(x,y){return{x:modalSnapValue(x),y:modalSnapValue(y)}}
 
-/* ═══════════════════════════════════════════════════════════════
-   AUTO-FIT — centre + zoom the editor so the whole gate fits
-   ═══════════════════════════════════════════════════════════════ */
+/* auto-fit */
 function fitModalToContents(padding=48){
     const vp=document.getElementById('custom-gate-modal-viewport');
     if(!vp||!modalComponents.length)return;
     const r=vp.getBoundingClientRect();
     if(r.width<10||r.height<10)return;
-
     let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
     modalComponents.forEach(c=>{
         const el=document.getElementById(`modal-comp-${c.id}`);
@@ -1881,21 +2189,15 @@ function fitModalToContents(padding=48){
         if(c.y+h>maxY)maxY=c.y+h;
     });
     if(!isFinite(minX))return;
-
     const cw=Math.max(1,maxX-minX), ch=Math.max(1,maxY-minY);
     const availW=Math.max(40,r.width-padding*2);
     const availH=Math.max(40,r.height-padding*2);
-
     let z=Math.min(availW/cw,availH/ch);
     z=Math.max(0.15,Math.min(1.6,z));
-
     modalZoom=z;
     modalPanX=r.width/2-(minX+cw/2)*z;
     modalPanY=r.height/2-(minY+ch/2)*z;
-
-    updateModalTransform();
-    markModalPortPositionsDirty();
-    drawModalWires();
+    updateModalTransform();markModalPortPositionsDirty();drawModalWires();
 }
 
 /* ghost drag (modal) */
@@ -1945,8 +2247,6 @@ function updateModalGhostPosition(cx,cy,w,h){
     g.style.transform=`scale(${modalZoom})`;
     g.dataset.canvasX=cX;g.dataset.canvasY=cY;
 }
-
-/* spawn modal component */
 function spawnModalComponentAt(type,x,y){
     const s=modalSnapPos(x,y);
     const comp={id:modalNextId++,type,x:s.x,y:s.y,state:0,outputVal:0,customLabel:'',
@@ -1972,8 +2272,6 @@ function spawnModalComponentAt(type,x,y){
     modalComponents.push(comp);renderModalComponent(comp);
     markModalPortPositionsDirty();drawModalWires();runModalSimulation();
 }
-
-/* render modal component */
 function renderModalComponent(comp){
     const el=document.createElement('div');el.className='gate';el.id=`modal-comp-${comp.id}`;
     el.style.setProperty('--gate-color',comp.isCustom&&comp.def?(comp.def.color||'#6f42c1'):getGateColorByName(comp.type,null));
@@ -2023,7 +2321,6 @@ function renderModalComponent(comp){
     document.getElementById('custom-gate-modal-canvas').appendChild(el);
     attachPortHandlers(el,'modal');
 }
-
 function connectModalWire(fc,fp,tc,tp){
     if(modalWires.some(w=>w.fromComp===fc&&w.fromPort===fp&&w.toComp===tc&&w.toPort===tp)){showToast('Wire already exists.','info',800);return}
     modalWires=modalWires.filter(w=>!(w.toComp===tc&&w.toPort===tp));
@@ -2036,7 +2333,6 @@ function exitModalWirePouring(){
     if(modalWirePouringState){const el=modalWirePouringState.el;if(el)el.classList.remove('pour-selected');modalWirePouringState=null}
     const i=document.getElementById('modal-pour-indicator');if(i)i.classList.remove('active');
 }
-
 function startDragModalGate(e,id){
     if(e.target.tagName==='BUTTON'||e.target.classList.contains('delete-btn')||e.target.classList.contains('pixel-delete-btn'))return;
     if(e.target.tagName==='INPUT'||e.target.type==='color')return;
@@ -2087,19 +2383,14 @@ function removeModalComponent(id){
     modalSelectedIds.delete(id);modalSelectedSourceIndex=0;
     markModalPortPositionsDirty();drawModalWires();runModalSimulation();
 }
-
-/* load def into editor (with defensive normalization) */
 function loadDefIntoModal(def, gateKey){
     resetModalState();
     clearModalCanvas();
     normalizeCustomGateDef(def);
-
     const liveInst = components.find(c =>
-        c.isCustom &&
-        (c.type === gateKey || c.type === def.name) &&
+        c.isCustom && (c.type === gateKey || c.type === def.name) &&
         Array.isArray(c.subComps) && c.subComps.length > 0
     );
-
     let sourceComps, sourceWires;
     if(liveInst && liveInst.subComps && liveInst.subComps.length){
         sourceComps = liveInst.subComps;
@@ -2108,7 +2399,6 @@ function loadDefIntoModal(def, gateKey){
         sourceComps = def.innerComps || [];
         sourceWires = def.innerWires || [];
     }
-
     if(liveInst && (!def.innerComps || def.innerComps.length === 0) && sourceComps.length){
         def.innerComps = sourceComps.map(sc => {
             const c2 = JSON.parse(JSON.stringify(sc));
@@ -2119,7 +2409,6 @@ function loadDefIntoModal(def, gateKey){
             return c2;
         });
         def.innerWires = sourceWires.map(w => ({ ...w }));
-
         const ins  = def.innerComps.filter(c => c.type === 'INPUT' || c.type === 'PUSH');
         const outs = def.innerComps.filter(c => c.type === 'OUTPUT');
         if(!def.inputsCount)  def.inputsCount  = ins.length;
@@ -2128,62 +2417,41 @@ function loadDefIntoModal(def, gateKey){
             def.inputInitials = ins.map(c => { const n = (c.customLabel || '').trim(); return n ? n.toUpperCase() : (c.type === 'INPUT' ? 'T' : 'P'); });
         if(!def.outputInitials || !def.outputInitials.length)
             def.outputInitials = outs.map(c => { const n = (c.customLabel || '').trim(); return n ? n.toUpperCase() : ''; });
-
         if(gateKey && savedCustomGates[gateKey]) savedCustomGates[gateKey] = def;
-        console.log('🔧 Recovered internals for', gateKey || def.name, '-', def.innerComps.length, 'components');
     }
-
     if(!sourceComps || sourceComps.length === 0){
         showToast('No stored internals for this gate — build them below and press OK.', 'info', 4500);
     }
-
     const idMap = {};
     const seen  = new Set();
     let maxNumericId = 0;
-
     sourceComps.forEach((sc, idx) => {
         const newSc = JSON.parse(JSON.stringify(sc));
-
         let oldId = newSc.id;
-        if(oldId === undefined || oldId === null || seen.has(oldId)){
-            oldId = '__orphan_' + idx;
-        }
+        if(oldId === undefined || oldId === null || seen.has(oldId))oldId = '__orphan_' + idx;
         seen.add(oldId);
-
         const newId = modalNextId++;
         idMap[oldId] = newId;
         newSc.id = newId;
         if(newId > maxNumericId) maxNumericId = newId;
-
         if(newSc.isCustom){
             const dn = newSc._defName || newSc.type;
-            if(dn && savedCustomGates[dn]){
-                newSc.type = dn; newSc._defName = dn; newSc.def = savedCustomGates[dn];
-            } else if(!newSc.def){
-                newSc.isCustom = false;
-                newSc.type = newSc.type || 'AND';
-            }
+            if(dn && savedCustomGates[dn]){newSc.type = dn; newSc._defName = dn; newSc.def = savedCustomGates[dn];}
+            else if(!newSc.def){newSc.isCustom = false; newSc.type = newSc.type || 'AND';}
         }
         initComponentInputs(newSc);
         if(newSc.type === 'CLOCK'){ newSc.state = 0; newSc.outputVal = 0; }
-
         modalComponents.push(newSc);
         renderModalComponent(newSc);
     });
-
     modalNextId = maxNumericId + 1;
-
     sourceWires.forEach(w => {
         const from = idMap[w.fromComp];
         const to   = idMap[w.toComp];
         if(from !== undefined && to !== undefined){
-            modalWires.push({
-                fromComp: from, fromPort: w.fromPort,
-                toComp:   to,   toPort:   w.toPort
-            });
+            modalWires.push({fromComp: from, fromPort: w.fromPort, toComp: to, toPort: w.toPort});
         }
     });
-
     markModalPortPositionsDirty();
     requestAnimationFrame(() => { drawModalWires(); runModalSimulation(); });
 }
@@ -2207,7 +2475,7 @@ function loadSelectionIntoModal(){
 }
 
 /* build gate from modal */
-function buildGateFromModal(gateName,gateColor){
+function buildGateFromModal(gateName,gateColor,gateFolder){
     if(customGateModalIsEditing&&customGateModalEditingType){
         if(gateName!==customGateModalEditingType&&savedCustomGates[gateName]){showToast('A gate with that name already exists!','error');return false}
     }else if(savedCustomGates[gateName]){showToast('A gate with that name already exists!','error');return false}
@@ -2226,7 +2494,6 @@ function buildGateFromModal(gateName,gateColor){
     const innerWires=modalWires.filter(w=>innerCompIds.has(w.fromComp)&&innerCompIds.has(w.toComp));
     const inputInitials=innerInputs.map(c=>{const n=(c.customLabel||'').trim();return n?n.toUpperCase():(c.type==='INPUT'?'T':'P')});
     const outputInitials=innerOutputs.map(c=>{const n=(c.customLabel||'').trim();return n?n.toUpperCase():''});
-
     const storedInnerComps=innerComps.map(c=>{
         const cl=JSON.parse(JSON.stringify(c));
         if(cl.isCustom&&cl.def)cl._defName=cl.def.name||cl.type;
@@ -2236,9 +2503,8 @@ function buildGateFromModal(gateName,gateColor){
         initComponentInputs(cl);
         return cl;
     });
-
     const newDef={
-        name:gateName,color:gateColor,
+        name:gateName,color:gateColor,folder:(gateFolder||'').trim(),
         inputsCount:innerInputs.length,outputsCount:innerOutputs.length,
         inputInitials,outputInitials,
         innerInputs:innerInputs.map(c=>c.id),
@@ -2246,6 +2512,7 @@ function buildGateFromModal(gateName,gateColor){
         innerComps:storedInnerComps,
         innerWires:innerWires.map(w=>({...w}))
     };
+    if(newDef.folder&&!savedFolders[newDef.folder])savedFolders[newDef.folder]={name:newDef.folder,color:'#475569'};
     if(customGateModalIsEditing&&customGateModalEditingType){
         const oldName=customGateModalEditingType;
         if(gateName!==oldName){
@@ -2263,20 +2530,20 @@ function buildGateFromModal(gateName,gateColor){
     return true;
 }
 
-/* container / IC helpers (kept for compatibility) */
+/* container / IC helpers */
 function updateContainerTitle(id,inputEl){const c=customContainers.find(x=>x.id===id);if(c){c.title=inputEl.value.trim()||`CustomIC${id}`;forceSaveState()}}
 function removeCustomContainer(id){const c=customContainers.find(x=>x.id===id);if(c){getInnerComponents(c).forEach(ic=>removeComponent(ic.id,true))}customContainers=customContainers.filter(x=>x.id!==id);const el=document.getElementById(`container-${id}`);if(el)el.remove();forceSaveState()}
 function getInnerComponents(cont){const r=[];for(const comp of components){const el=document.getElementById(`comp-${comp.id}`);if(!el)continue;const w=el.offsetWidth||140,h=el.offsetHeight||60;if(comp.x>=cont.x&&(comp.x+w)<=(cont.x+cont.width)&&comp.y>=cont.y+35&&(comp.y+h)<=(cont.y+35+cont.height))r.push(comp)}return r}
-function renderCustomContainer(cont){/* no-op placeholder */}
-function startResizeContainer(){/* no-op placeholder */}
-function startDragContainer(){/* no-op placeholder */}
-function updateContainerColor(){/* no-op placeholder */}
+function renderCustomContainer(cont){}
+function startResizeContainer(){}
+function startDragContainer(){}
+function updateContainerColor(){}
 function openICManager(){document.getElementById('ic-modal').style.display='flex'}
 function closeICManager(){document.getElementById('ic-modal').style.display='none'}
 function closeICManagerOutside(e){if(e.target.id==='ic-modal')closeICManager()}
 function setCustomGateColor(n,c){const d=savedCustomGates[n];if(!d||!/^#[0-9a-fA-F]{6}$/.test(c))return;d.color=c;components.forEach(x=>{if(x.isCustom&&x.type===n){x.def=d;const el=document.getElementById(`comp-${x.id}`);if(el)el.style.setProperty('--gate-color',c)}});updateCustomGatesToolbar();forceSaveState();runSimulation()}
 async function renameIC(o){const n=await showPrompt('Rename IC',`Enter new name for "${o}":`,o);if(!n||!n.trim()||n.trim()===o)return;const t=n.trim();if(savedCustomGates[t]){showToast('A custom gate with that name already exists!','error');return}savedCustomGates[t]=savedCustomGates[o];savedCustomGates[t].name=t;delete savedCustomGates[o];components.forEach(c=>{if(c.type===o){c.type=t;c.def.name=t}});updateCustomGatesToolbar();forceSaveState()}
-async function deleteIC(n){const ok=await showConfirm('Delete Custom IC',`Delete "${n}" and all its instances?`);if(!ok)return;delete savedCustomGates[n];components=components.filter(c=>{if(c.type===n){const el=document.getElementById(`comp-${c.id}`);if(el)el.remove();return false}return true});wires=wires.filter(w=>components.find(c=>c.id===w.fromComp)&&components.find(c=>c.id===w.toComp));updateCustomGatesToolbar();drawWires();forceSaveState()}
+async function deleteIC(n){const ok=await showConfirm('Delete Custom IC',`Delete "${n}" and all its instances?`);if(!ok)return;deleteCustomGateByName(n);updateCustomGatesToolbar();drawWires();forceSaveState()}
 
 /* global exports */
 window.startGhostDrag=startGhostDrag;window.togglePause=togglePause;window.stepSimulation=stepSimulation;
@@ -2300,13 +2567,22 @@ window.openCustomGateModal=openCustomGateModal;window.closeCustomGateModal=close
 window.closeCustomGateModalOutside=closeCustomGateModalOutside;
 window.startDragModalGate=startDragModalGate;window.removeModalComponent=removeModalComponent;
 window.refreshAllInstances=refreshAllInstances;
-window.deleteCurrentCustomGate = deleteCurrentCustomGate;
-window.fitModalToContents = fitModalToContents;
+window.deleteCurrentCustomGate=deleteCurrentCustomGate;
+window.fitModalToContents=fitModalToContents;
+window.updateCustomGatesToolbar=updateCustomGatesToolbar;
+window.closeGateFolderDropdown=closeGateFolderDropdown;
+window.toggleToasts=toggleToasts;
+window.openFolderDialog=openFolderDialog;
+window.closeFolderDialog=closeFolderDialog;
+window.closeFolderDialogOutside=closeFolderDialogOutside;
+window.createNewFolder=createNewFolder;
+window.editFolder=editFolder;
+window.moveGateToFolder=moveGateToFolder;
 
 /* init */
 window.addEventListener('load',()=>{
     loadFromLocalStorage();
-    updateTransform();updateCustomGatesToolbar();
+    updateTransform();updateCustomGatesToolbar();updateToastButton();
     svgWires=document.getElementById('wires');
     components.forEach(comp=>renderComponent(comp));
     markPortPositionsDirty();drawWires();runSimulation();

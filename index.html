@@ -42,7 +42,7 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
 .push-btn{padding:3px 6px;font-size:10px;background:#6c5ce7;color:#fff;border:none;border-radius:3px;cursor:pointer;z-index:4;position:relative;pointer-events:auto;touch-action:manipulation;transition:background .08s,transform .08s;min-width:32px;text-align:center;user-select:none;-webkit-user-select:none}
 .push-btn:active,.push-btn.pressed{background:#a29bfe;transform:scale(.92)}
 .push-btn.active{background:#28a745}
-.delay-input{width:34px;background:rgba(0,0,0,.2);color:var(--text-color);border:1px solid var(--border-color);border-radius:3px;padding:1px 3px;font-size:10px;text-align:center;z-index:4;pointer-events:auto}
+.delay-input{width:58px;background:rgba(0,0,0,.2);color:var(--text-color);border:1px solid var(--border-color);border-radius:3px;padding:1px 4px;font-size:10px;text-align:center;z-index:4;pointer-events:auto}
 .bulb{width:16px;height:16px;border-radius:50%;background:#ddd;border:2px solid #555;flex-shrink:0;transition:background .1s,box-shadow .1s}
 .bulb.on{background:#ffc107;box-shadow:0 0 10px #ffc107;border-color:#d39e00}
 .pulse-led{width:10px;height:10px;border-radius:50%;background:#3f3f46;border:2px solid #555;flex-shrink:0;transition:background .06s,box-shadow .06s}
@@ -319,16 +319,16 @@ function snapPos(x,y){return{x:snapValue(x),y:snapValue(y)}}
 
 /* ─── timing core ─────────────────────────────────────────────
    The simulation ticks every TICK_MS milliseconds.  All user-facing
-   timing values (DELAY, PULSE) are expressed in milliseconds and
-   converted to a whole number of ticks internally.               */
+   timing values (DELAY) are expressed in milliseconds and converted
+   to a whole number of ticks internally.                           */
 const TICK_MS=50;
 const MAX_TICKS=400;              /* 20 s ceiling */
 function delayTicksFor(comp){
     const ms=Math.max(TICK_MS,Number(comp&&comp.delayMs)||150);
     return Math.max(1,Math.min(MAX_TICKS,Math.round(ms/TICK_MS)));
 }
-function pulseTicksFor(comp){
-    const ms=Math.max(TICK_MS,Number(comp&&comp.pulseMs)||100);
+function clockTicksFor(comp){
+    const ms=Math.max(TICK_MS,Number(comp&&comp.clockMs)||250);
     return Math.max(1,Math.min(MAX_TICKS,Math.round(ms/TICK_MS)));
 }
 /* Resize the delay ring-buffer while preserving the most recent samples. */
@@ -350,10 +350,8 @@ function initComponentInputs(comp){
     const t=comp.type;
     if(comp.isCustom){
         comp.inputs=new Array((comp.def&&comp.def.inputsCount)||0).fill(0);
-    }else if(t==='INPUT'||t==='OUTPUT'||t==='SCREEN'||t==='PUSH'||t==='NOT'||t==='DELAY'||t==='COLOR'||t==='PULSE'){
+    }else if(t==='INPUT'||t==='OUTPUT'||t==='SCREEN'||t==='PUSH'||t==='NOT'||t==='DELAY'||t==='COLOR'||t==='PULSE'||t==='CLOCK'){
         comp.inputs=[0];
-    }else if(t==='CLOCK'){
-        comp.inputs=[];
     }else{
         comp.inputs=[0,0];
     }
@@ -367,11 +365,18 @@ function initComponentInputs(comp){
         ensureDelayQueue(comp);
     }
     // ── CLOCK ──
-    if(t==='CLOCK'){comp.clockVal=comp.clockVal||5;comp.clockCounter=comp.clockCounter||0}
-    // ── PULSE ──
+    if(t==='CLOCK'){
+        if(comp.clockMs===undefined||comp.clockMs===null){
+            // migrate legacy tick-based value (1 old tick ≈ 50 ms)
+            comp.clockMs=(Number(comp.clockVal)||5)*TICK_MS;
+        }
+        comp.clockMs=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,Math.round(comp.clockMs)));
+        comp.clockCounter=comp.clockCounter||0;
+    }
+    // ── PULSE (one-shot) ──
     if(t==='PULSE'){
-        comp.pulseMs=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,Math.round(Number(comp.pulseMs)||100)));
         comp.pulseCounter=comp.pulseCounter||0;
+        comp.pulsePrevInput=comp.pulsePrevInput||0;
         if(comp.state===undefined)comp.state=0;
         comp.outputVal=comp.state;
     }
@@ -453,7 +458,8 @@ function pasteAtCursor(){
         const cl=JSON.parse(JSON.stringify(c));cl.id=nid;cl.x=snapValue(c.x+ox);cl.y=snapValue(c.y+oy);
         if(cl.type==='INPUT'||cl.type==='PUSH'){cl.state=0;cl.outputVal=0}
         if(cl.type==='DELAY'){cl.delayMs=cl.delayMs||(Number(cl.delayVal)||3)*TICK_MS;cl.delayQueue=null}
-        if(cl.type==='CLOCK'){cl.clockCounter=0;cl.state=0;cl.outputVal=0}
+        if(cl.type==='CLOCK'){cl.clockMs=cl.clockMs||(Number(cl.clockVal)||5)*TICK_MS;cl.clockCounter=0;cl.state=0;cl.outputVal=0}
+        if(cl.type==='PULSE'){cl.pulseCounter=0;cl.pulsePrevInput=0;cl.state=0;cl.outputVal=0}
         if(cl.isCustom){
             const dn=cl._defName||cl.type;
             if(savedCustomGates[dn]){cl.def=savedCustomGates[dn];cl.type=dn}
@@ -492,8 +498,8 @@ function startGhostDrag(e,type){
         else if(type==='OUTPUT'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port"></div><div class="bulb"></div></div>`}
         else if(type==='NOT'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port"></div><span style="font-size:10px;">NOT</span><div class="port output"></div></div>`}
         else if(type==='DELAY'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port"></div><span style="font-size:9px;">150ms</span><div class="port output"></div></div>`}
-        else if(type==='PULSE'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port"></div><span class="pulse-led"></span><span style="font-size:9px;">100ms</span><div class="port output"></div></div>`}
-        else if(type==='CLOCK'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:9px;">⏱</span><input type="number" value="5" style="width:28px;font-size:10px;" disabled><div class="port output"></div></div>`}
+        else if(type==='PULSE'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port"></div><span style="font-size:9px;font-weight:bold;">PULSE</span><span style="font-size:9px;">1-shot</span><div class="port output"></div></div>`}
+        else if(type==='CLOCK'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port"></div><span style="font-size:9px;">⏱</span><input type="number" value="250" style="width:44px;font-size:10px;" disabled><div class="port output"></div></div>`}
         else if(type==='COLOR'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port"></div><span style="font-size:9px;">🎨</span><div class="port output"></div></div>`}
         else if(type==='SCREEN'){bc=`<div style="width:40px;height:40px;background:var(--pixel-off);position:relative;"><div class="port" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.7);width:12px;height:12px;border-radius:50%;background:#007bff;border:2px solid #fff;opacity:.5;"></div></div>`;w=40;h=40}
         else{bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div><div class="port" style="margin-bottom:3px;"></div><div class="port"></div></div><span style="font-size:10px;font-weight:bold;">${type}</span><div class="port output"></div></div>`}
@@ -672,8 +678,8 @@ function spawnComponentAt(type,x,y){
     const id=nextId++,s=snapPos(x,y);
     const comp={id,type,x:s.x,y:s.y,state:0,outputVal:0,customLabel:'',
         delayMs:type==='DELAY'?150:undefined,delayQueue:type==='DELAY'?new Array(3).fill(0):undefined,
-        pulseMs:type==='PULSE'?100:undefined,pulseCounter:type==='PULSE'?0:undefined,
-        clockVal:type==='CLOCK'?5:undefined,clockCounter:type==='CLOCK'?0:undefined,
+        pulseCounter:type==='PULSE'?0:undefined,pulsePrevInput:type==='PULSE'?0:undefined,
+        clockMs:type==='CLOCK'?250:undefined,clockCounter:type==='CLOCK'?0:undefined,
         pixelColor:type==='COLOR'?'#39ff14':undefined,
         pixelWidth:type==='SCREEN'?40:undefined,pixelHeight:type==='SCREEN'?40:undefined};
     initComponentInputs(comp);
@@ -690,9 +696,9 @@ function spawnCustomGateInstance(gateName,x,y){
         delayStates:{},clockStates:{}};
     comp.subComps.forEach(sc=>{
         if(sc.isCustom&&sc.type&&savedCustomGates[sc.type])sc.def=savedCustomGates[sc.type];
-        initComponentInputs(sc);   /* <-- THE FIX: restore inputs array */
+        initComponentInputs(sc);
         if(sc.type==='DELAY'){const v=delayTicksFor(sc);sc.delayQueue=new Array(v).fill(0);comp.delayStates[sc.id]={queue:new Array(v).fill(0),ptr:0}}
-        if(sc.type==='CLOCK'){sc.clockVal=sc.clockVal||5;comp.clockStates[sc.id]={counter:0,state:0,period:sc.clockVal};sc.outputVal=0}
+        if(sc.type==='CLOCK'){sc.clockMs=sc.clockMs||250;comp.clockStates[sc.id]={counter:0,state:0,period:clockTicksFor(sc)};sc.outputVal=0}
         if(sc.type==='SCREEN'){sc.pixelWidth=sc.pixelWidth||40;sc.pixelHeight=sc.pixelHeight||40}
         if(sc.type==='COLOR')sc.pixelColor=sc.pixelColor||'#39ff14';
     });
@@ -717,9 +723,9 @@ function renderComponent(comp){
     else if(comp.type==='PUSH'){const l=(comp.customLabel||'').trim()||'Push';bc=`<div class="io-port-row"><button class="push-btn ${comp.state===1?'active':''}" id="push-${comp.id}">${comp.state===1?'ON':'PRESS'}</button><div style="display:flex;align-items:center;gap:3px;"><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div><span class="io-label">${l}</span></div></div>`}
     else if(comp.type==='OUTPUT'){const l=(comp.customLabel||'').trim()||'OUT';bc=`<div class="io-port-row" style="flex-direction:row-reverse;"><div class="bulb" id="bulb-${comp.id}"></div><div style="display:flex;align-items:center;gap:3px;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><span class="io-label">${l}</span></div></div>`}
     else if(comp.type==='NOT'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><span style="font-size:10px;font-weight:bold;">NOT</span><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
-    else if(comp.type==='DELAY'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><input type="number" min="50" max="20000" step="50" value="${comp.delayMs||150}" class="delay-input" id="delay-val-${comp.id}" title="Delay in milliseconds"><span style="font-size:8px;opacity:.6;">ms</span><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
-    else if(comp.type==='PULSE'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><span class="pulse-led ${comp.state===1?'on':''}" id="pulse-led-${comp.id}"></span><input type="number" min="50" max="20000" step="50" value="${comp.pulseMs||100}" class="delay-input" id="pulse-val-${comp.id}" title="Pulse period in milliseconds"><span style="font-size:8px;opacity:.6;">ms</span><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
-    else if(comp.type==='CLOCK'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:9px;">⏱</span><input type="number" min="1" max="999" value="${comp.clockVal}" class="delay-input" id="clock-val-${comp.id}"><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
+    else if(comp.type==='DELAY'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><input type="number" min="1" max="20000" step="1" value="${comp.delayMs||150}" class="delay-input" id="delay-val-${comp.id}" title="Delay in milliseconds (1 – 20000)"><span style="font-size:8px;opacity:.6;">ms</span><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
+    else if(comp.type==='PULSE'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><span style="font-size:9px;font-weight:bold;">PULSE</span><span style="font-size:8px;opacity:.6;">1-shot</span><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
+    else if(comp.type==='CLOCK'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><span style="font-size:9px;">⏱</span><input type="number" min="50" max="20000" step="1" value="${comp.clockMs||250}" class="delay-input" id="clock-val-${comp.id}" title="Toggle period in milliseconds (50 – 20000)"><span style="font-size:8px;opacity:.6;">ms</span><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
     else if(comp.type==='COLOR'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><input type="color" class="color-picker-input" value="${comp.pixelColor||'#39ff14'}" id="color-val-${comp.id}"><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
     else if(comp.type==='SCREEN'){const w=comp.pixelWidth||40,h=comp.pixelHeight||40;
         bc=`<div style="position:relative;display:inline-block;width:${w}px;height:${h}px;"><div class="pixel-square" id="pixel-${comp.id}"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div></div><button class="pixel-delete-btn" onclick="removeComponent(${comp.id})">✕</button><div class="pixel-resize-handle" onmousedown="startResizePixel(event,${comp.id})" ontouchstart="startResizePixel(event,${comp.id})"></div></div>`;
@@ -737,9 +743,8 @@ function renderComponent(comp){
     if(comp.type==='INPUT'){const b=el.querySelector(`#sw-${comp.id}`);const tg=e=>{e.preventDefault();e.stopPropagation();toggleInput(comp.id)};b.addEventListener('click',tg);b.addEventListener('touchstart',tg,{passive:false})}
     if(comp.type==='PUSH'){const b=el.querySelector(`#push-${comp.id}`);const ps=e=>{e.preventDefault();e.stopPropagation();comp.state=1;comp.outputVal=1;b.classList.add('active');b.innerText='ON';runSimulation();forceSaveState()};const pe=e=>{e.preventDefault();e.stopPropagation();comp.state=0;comp.outputVal=0;b.classList.remove('active');b.innerText='PRESS';runSimulation();forceSaveState()};b.addEventListener('mousedown',ps);b.addEventListener('mouseup',pe);b.addEventListener('mouseleave',pe);b.addEventListener('touchstart',ps,{passive:false});b.addEventListener('touchend',pe,{passive:false});b.addEventListener('touchcancel',pe,{passive:false})}
     if(comp.type==='INPUT'||comp.type==='OUTPUT'||comp.type==='PUSH'){const inp=el.querySelector(`#label-${comp.id}`);inp.addEventListener('input',e=>{comp.customLabel=e.target.value;const ls=el.querySelector('.io-label');if(ls){const dl=comp.type==='INPUT'?'Toggle':comp.type==='PUSH'?'Push':'OUT';ls.innerText=(comp.customLabel||'').trim()||dl}forceSaveState()});inp.addEventListener('mousedown',e=>e.stopPropagation());inp.addEventListener('touchstart',e=>e.stopPropagation())}
-    if(comp.type==='DELAY'){const dInp=el.querySelector(`#delay-val-${comp.id}`);dInp.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(dInp.value)||150;v=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,v));comp.delayMs=Math.round(v/TICK_MS)*TICK_MS;dInp.value=comp.delayMs;ensureDelayQueue(comp);forceSaveState()});dInp.addEventListener('mousedown',e=>e.stopPropagation())}
-    if(comp.type==='PULSE'){const pInp=el.querySelector(`#pulse-val-${comp.id}`);pInp.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(pInp.value)||100;v=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,v));comp.pulseMs=Math.round(v/TICK_MS)*TICK_MS;pInp.value=comp.pulseMs;comp.pulseCounter=0;forceSaveState()});pInp.addEventListener('mousedown',e=>e.stopPropagation())}
-    if(comp.type==='CLOCK'){const cInp=el.querySelector(`#clock-val-${comp.id}`);cInp.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(cInp.value)||1;v=Math.max(1,Math.min(999,v));comp.clockVal=v;comp.clockCounter=0;forceSaveState()});cInp.addEventListener('mousedown',e=>e.stopPropagation())}
+    if(comp.type==='DELAY'){const dInp=el.querySelector(`#delay-val-${comp.id}`);dInp.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(dInp.value)||150;v=Math.max(1,Math.min(TICK_MS*MAX_TICKS,v));comp.delayMs=Math.round(v);dInp.value=comp.delayMs;ensureDelayQueue(comp);forceSaveState()});dInp.addEventListener('mousedown',e=>e.stopPropagation())}
+    if(comp.type==='CLOCK'){const cInp=el.querySelector(`#clock-val-${comp.id}`);cInp.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(cInp.value)||250;v=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,v));comp.clockMs=Math.round(v);cInp.value=comp.clockMs;comp.clockCounter=0;forceSaveState()});cInp.addEventListener('mousedown',e=>e.stopPropagation())}
     if(comp.type==='COLOR'){const cInp=el.querySelector(`#color-val-${comp.id}`);cInp.addEventListener('input',e=>{e.stopPropagation();comp.pixelColor=e.target.value;updateVisuals();forceSaveState()});cInp.addEventListener('mousedown',e=>e.stopPropagation())}
     attachPortHandlers(el,'main');
     canvas.appendChild(el);markPortPositionsDirty();
@@ -993,7 +998,6 @@ function evaluateCustomGate(comp){
         changed=false;iter++;
         for(const sc of sub){
             if(sc.type==='INPUT'||sc.type==='PUSH')continue;
-            if(sc.type==='CLOCK')continue;
             const oldOut=sc.outputVal,oldOutputs=sc.outputsArray?sc.outputsArray.slice():[];
             const ic=(sc.inputs||[]).length;const ins=new Array(ic).fill(0);
             for(let i=0;i<ic;i++){
@@ -1003,13 +1007,14 @@ function evaluateCustomGate(comp){
                 else ins[i]=src.outputVal||0;
             }
             sc.inputs=ins;
+            /* nested clock / pulse: inputs latched here, output driven by tick */
+            if(sc.type==='CLOCK'||sc.type==='PULSE')continue;
             if(sc.isCustom)evaluateCustomGate(sc);
             else if(sc.type==='DELAY'){
                 /* read-only — the tick advances nested delay buffers */
                 const st=comp.delayStates&&comp.delayStates[sc.id];
                 sc.outputVal=st?(st.queue[st.ptr]||0):0;
             }
-            else if(sc.type==='PULSE'){sc.outputVal=sc.state||0}
             else sc.outputVal=evaluateGate(sc,ins);
             const oc=oldOut!==sc.outputVal;
             const ocs=sc.outputsArray&&(oldOutputs.length!==sc.outputsArray.length||oldOutputs.some((v,i)=>v!==sc.outputsArray[i]));
@@ -1022,7 +1027,14 @@ function evaluateCustomGate(comp){
 }
 function tickClocksMain(comps){
     comps.forEach(comp=>{
-        if(comp.type==='CLOCK'){const p=Math.max(1,comp.clockVal||5);comp.clockCounter=(comp.clockCounter||0)+1;if(comp.clockCounter>=p){comp.clockCounter=0;comp.state=comp.state===1?0:1;comp.outputVal=comp.state}}
+        if(comp.type==='CLOCK'){
+            if(!Array.isArray(comp.inputs)||comp.inputs.length<1)comp.inputs=[0];
+            /* gated oscillator – identical behaviour to the old PULSE */
+            if(!(comp.inputs[0]?1:0)){comp.clockCounter=0;comp.state=0;comp.outputVal=0;return}
+            const p=clockTicksFor(comp);
+            comp.clockCounter=(comp.clockCounter||0)+1;
+            if(comp.clockCounter>=p){comp.clockCounter=0;comp.state=comp.state===1?0:1;comp.outputVal=comp.state}
+        }
         else if(comp.isCustom&&comp.subComps)tickNestedClocksMain(comp);
     });
 }
@@ -1030,8 +1042,11 @@ function tickNestedClocksMain(comp){
     if(!comp.clockStates)comp.clockStates={};
     comp.subComps.forEach(sc=>{
         if(sc.type==='CLOCK'){
-            if(!comp.clockStates[sc.id])comp.clockStates[sc.id]={counter:0,state:sc.outputVal||0,period:sc.clockVal||5};
-            const st=comp.clockStates[sc.id];st.period=Math.max(1,sc.clockVal||5);st.counter++;
+            if(!Array.isArray(sc.inputs)||sc.inputs.length<1)sc.inputs=[0];
+            if(!comp.clockStates[sc.id])comp.clockStates[sc.id]={counter:0,state:sc.outputVal||0,period:clockTicksFor(sc)};
+            const st=comp.clockStates[sc.id];
+            if(!(sc.inputs[0]?1:0)){st.counter=0;st.state=0;sc.state=0;sc.outputVal=0;return}
+            st.period=clockTicksFor(sc);st.counter++;
             if(st.counter>=st.period){st.counter=0;st.state=st.state===1?0:1}
             sc.state=st.state;sc.outputVal=st.state;
         }else if(sc.isCustom&&sc.subComps)tickNestedClocksMain(sc);
@@ -1046,7 +1061,6 @@ function runGenericSimulation(comps,wr,updateFn){
         changed=false;iter++;
         for(const comp of comps){
             if(comp.type==='INPUT'||comp.type==='PUSH')continue;
-            if(comp.type==='CLOCK')continue;
             const oldOut=comp.outputVal,oldOutputs=comp.outputsArray?comp.outputsArray.slice():[];
             const ic=(comp.inputs||[]).length;const ins=new Array(ic).fill(0);
             for(let i=0;i<ic;i++){
@@ -1056,6 +1070,9 @@ function runGenericSimulation(comps,wr,updateFn){
                 else ins[i]=src.outputVal||0;
             }
             comp.inputs=ins;
+            /* CLOCK/PULSE have an input (they're gated / edge-triggered) but
+               their output is always produced by the tick, never the solver. */
+            if(comp.type==='CLOCK'||comp.type==='PULSE')continue;
             if(comp.isCustom)evaluateCustomGate(comp);
             else comp.outputVal=evaluateGate(comp,ins);
             const oc=oldOut!==comp.outputVal;
@@ -1075,18 +1092,22 @@ function tickDelayComponent(comp){
     q.shift();
     q.push((comp.inputs&&comp.inputs[0])?1:0);
 }
-/* ── PULSE ──────────────────────────────────────────────────── */
-/* While the input is held high the output toggles every `pulseMs`. */
+/* ── PULSE (one-shot) ───────────────────────────────────────── */
+/* A rising edge on the input drives the output high for exactly one tick,
+   then it falls back to 0. It will not fire again until the input goes low
+   and then high again. */
 function tickPulseComponent(comp){
-    const period=pulseTicksFor(comp);
-    if(((comp.inputs&&comp.inputs[0])?1:0)===1){
-        comp.pulseCounter=(comp.pulseCounter||0)+1;
-        if(comp.pulseCounter>=period){comp.pulseCounter=0;comp.state=comp.state===1?0:1}
-    }else{
-        comp.pulseCounter=0;
-        comp.state=0;
+    const inp=(comp.inputs&&comp.inputs[0])?1:0;
+    const prev=comp.pulsePrevInput?1:0;
+    if(inp===1&&prev===0){
+        comp.state=1;
+        comp.pulseCounter=1;
+    }else if((comp.pulseCounter||0)>0){
+        comp.pulseCounter--;
+        if(comp.pulseCounter<=0){comp.pulseCounter=0;comp.state=0}
     }
-    comp.outputVal=comp.state;
+    comp.pulsePrevInput=inp;
+    comp.outputVal=comp.state?1:0;
 }
 /* Recursively advance DELAY / PULSE components nested inside custom gates. */
 function tickNestedTiming(container){
@@ -1259,7 +1280,7 @@ function refreshAllInstances(gateName,newDef){
     function refreshOneInstance(instance,def){
         const oldStateMap=new Map();
         for(const old of(instance.subComps||[])){
-            oldStateMap.set(old.id,{state:old.state,outputVal:old.outputVal,delayQueueRaw:old.delayQueue?old.delayQueue.slice():undefined,clockCounter:old.clockCounter,x:old.x,y:old.y,customLabel:old.customLabel||'',pixelColor:old.pixelColor,pixelWidth:old.pixelWidth,pixelHeight:old.pixelHeight,subComps:old.subComps?JSON.parse(JSON.stringify(old.subComps)):undefined,subWires:old.subWires?old.subWires.slice():undefined,delayStates:old.delayStates?JSON.parse(JSON.stringify(old.delayStates)):undefined,clockStates:old.clockStates?JSON.parse(JSON.stringify(old.clockStates)):undefined,clockVal:old.clockVal,outputsArray:old.outputsArray?old.outputsArray.slice():undefined});
+            oldStateMap.set(old.id,{state:old.state,outputVal:old.outputVal,delayQueueRaw:old.delayQueue?old.delayQueue.slice():undefined,clockCounter:old.clockCounter,x:old.x,y:old.y,customLabel:old.customLabel||'',pixelColor:old.pixelColor,pixelWidth:old.pixelWidth,pixelHeight:old.pixelHeight,subComps:old.subComps?JSON.parse(JSON.stringify(old.subComps)):undefined,subWires:old.subWires?old.subWires.slice():undefined,delayStates:old.delayStates?JSON.parse(JSON.stringify(old.delayStates)):undefined,clockStates:old.clockStates?JSON.parse(JSON.stringify(old.clockStates)):undefined,clockMs:old.clockMs,outputsArray:old.outputsArray?old.outputsArray.slice():undefined});
         }
         const freshDef=savedCustomGates[gateName];if(!freshDef)return;
         const newSubComps=freshDef.innerComps.map(scDef=>{
@@ -1272,13 +1293,13 @@ function refreshAllInstances(gateName,newDef){
                 newSc.y=old.y!==undefined?old.y:scDef.y;
                 newSc.customLabel=old.customLabel||'';
                 if(newSc.type==='DELAY'){newSc.delayQueue=(old.delayQueueRaw&&old.delayQueueRaw.length)?old.delayQueueRaw.slice():null}
-                if(newSc.type==='CLOCK'){newSc.clockCounter=old.clockCounter!==undefined?old.clockCounter:0;newSc.clockVal=old.clockVal||newSc.clockVal||5;newSc.state=old.state||0;newSc.outputVal=old.outputVal||0}
+               if(newSc.type==='CLOCK'){newSc.clockCounter=old.clockCounter!==undefined?old.clockCounter:0;newSc.clockMs=old.clockMs||newSc.clockMs||(Number(newSc.clockVal)||5)*TICK_MS;newSc.state=old.state||0;newSc.outputVal=old.outputVal||0}
                 if(newSc.type==='SCREEN'){newSc.pixelWidth=old.pixelWidth||40;newSc.pixelHeight=old.pixelHeight||40}
                 if(newSc.type==='COLOR')newSc.pixelColor=old.pixelColor||'#39ff14';
                 if(newSc.isCustom&&newSc.type&&savedCustomGates[newSc.type]){newSc.def=savedCustomGates[newSc.type];if(old.subComps)newSc.subComps=old.subComps;else newSc.subComps=JSON.parse(JSON.stringify(savedCustomGates[newSc.type].innerComps||[]));if(old.subWires)newSc.subWires=old.subWires;else newSc.subWires=(savedCustomGates[newSc.type].innerWires||[]).slice();if(old.delayStates)newSc.delayStates=old.delayStates;if(old.clockStates)newSc.clockStates=old.clockStates;if(old.outputsArray)newSc.outputsArray=old.outputsArray}
             }else{
                 if(newSc.type==='DELAY')newSc.delayQueue=null;
-                if(newSc.type==='CLOCK'){newSc.clockCounter=0;newSc.state=0;newSc.outputVal=0}
+                if(newSc.type==='CLOCK'){newSc.clockMs=newSc.clockMs||250;newSc.clockCounter=0;newSc.state=0;newSc.outputVal=0}
                 if(newSc.type==='SCREEN'){newSc.pixelWidth=newSc.pixelWidth||40;newSc.pixelHeight=newSc.pixelHeight||40}
                 if(newSc.type==='COLOR')newSc.pixelColor=newSc.pixelColor||'#39ff14';
                 if(newSc.isCustom&&newSc.type&&savedCustomGates[newSc.type]){const nd=savedCustomGates[newSc.type];newSc.def=nd;newSc.subComps=nd.innerComps?JSON.parse(JSON.stringify(nd.innerComps)):[];newSc.subWires=(nd.innerWires||[]).slice()}
@@ -1290,7 +1311,7 @@ function refreshAllInstances(gateName,newDef){
         instance.subWires=(freshDef.innerWires||[]).slice();
         instance.def=freshDef;
         if(instance.delayStates){const nds={};for(const sc of newSubComps)if(sc.type==='DELAY'){const v=delayTicksFor(sc);const old=oldStateMap.get(sc.id);const q=(old&&old.delayQueueRaw&&old.delayQueueRaw.length===v)?old.delayQueueRaw.slice():new Array(v).fill(0);nds[sc.id]={queue:q,ptr:0}}instance.delayStates=nds}
-        if(instance.clockStates){const ncs={};for(const sc of newSubComps)if(sc.type==='CLOCK'){const old=oldStateMap.get(sc.id);ncs[sc.id]={counter:(old&&old.clockCounter)||0,state:(old&&old.state)||0,period:sc.clockVal||5}}instance.clockStates=ncs}
+        if(instance.clockStates){const ncs={};for(const sc of newSubComps)if(sc.type==='CLOCK'){const old=oldStateMap.get(sc.id);ncs[sc.id]={counter:(old&&old.clockCounter)||0,state:(old&&old.state)||0,period:clockTicksFor(sc)}}instance.clockStates=ncs}
         if(instance.outputsArray)instance.outputsArray=new Array(freshDef.outputsCount||0).fill(0);
         const el=document.getElementById(`comp-${instance.id}`);
         if(el){el.remove();renderComponent(instance);const ne=document.getElementById(`comp-${instance.id}`);if(ne){ne.classList.add('gate-updating');setTimeout(()=>ne.classList.remove('gate-updating'),600)}}
@@ -1369,7 +1390,8 @@ function mergeImportedState(state){
         const cl=JSON.parse(JSON.stringify(comp));cl.id=idMap[comp.id];
         if(cl.isCustom&&cl.type&&savedCustomGates[cl.type])cl.def=savedCustomGates[cl.type];
         if(cl.type==='DELAY'){cl.delayMs=cl.delayMs||(Number(cl.delayVal)||3)*TICK_MS;cl.delayQueue=null}
-        if(cl.type==='CLOCK'){cl.clockVal=cl.clockVal||5;cl.clockCounter=0}
+        if(cl.type==='CLOCK'){cl.clockMs=cl.clockMs||(Number(cl.clockVal)||5)*TICK_MS;cl.clockCounter=0}
+        if(cl.type==='PULSE'){cl.pulseCounter=0;cl.pulsePrevInput=0}
         if(cl.type==='SCREEN'){cl.pixelWidth=cl.pixelWidth||40;cl.pixelHeight=cl.pixelHeight||40}
         if(cl.type==='COLOR')cl.pixelColor=cl.pixelColor||'#39ff14';
         if(cl.subComps)cl.subComps.forEach(sc=>{
@@ -1388,11 +1410,9 @@ function mergeImportedState(state){
 function normalizeCustomGateDef(def){
     if(!def) return def;
 
-    // ── Top-level fields with multiple fallbacks ──────────────────
     def.name    = def.name    || def.gateName  || def.title || 'Unnamed';
     def.color   = def.color   || def.gateColor || '#6f42c1';
 
-    // ── Inner components: accept any of the common names ─────────
     if(!Array.isArray(def.innerComps)){
         if(Array.isArray(def.innerComponents))      def.innerComps = def.innerComponents;
         else if(Array.isArray(def.subComps))        def.innerComps = def.subComps;
@@ -1400,7 +1420,6 @@ function normalizeCustomGateDef(def){
         else                                        def.innerComps = [];
     }
 
-    // ── Inner wires: same treatment ─────────────────────────────
     if(!Array.isArray(def.innerWires)){
         if(Array.isArray(def.innerConnections))     def.innerWires = def.innerConnections;
         else if(Array.isArray(def.subWires))        def.innerWires = def.subWires;
@@ -1414,11 +1433,9 @@ function normalizeCustomGateDef(def){
     def.innerInputs    = def.innerInputs    || [];
     def.innerOutputs   = def.innerOutputs   || [];
 
-    // ── Per-component cleanup ───────────────────────────────────
     const idSet = new Set();
     def.innerComps.forEach(sc => {
         if(sc.id === undefined || sc.id === null){
-            // Give orphan components a synthetic id (will be re-numbered on load)
             sc.id = 'orphan_' + Math.random().toString(36).slice(2,9);
         }
         idSet.add(sc.id);
@@ -1428,7 +1445,6 @@ function normalizeCustomGateDef(def){
             if(dn && savedCustomGates[dn]){
                 sc.type = dn; sc._defName = dn; sc.def = savedCustomGates[dn];
             } else if(!sc.def){
-                // Unresolvable custom gate — downgrade to a plain placeholder
                 sc.isCustom = false;
                 sc.type = sc.type || 'AND';
             }
@@ -1440,12 +1456,10 @@ function normalizeCustomGateDef(def){
         if(sc.customLabel === undefined)   sc.customLabel = '';
     });
 
-    // ── Drop wires that reference non-existent components ───────
     def.innerWires = def.innerWires.filter(w =>
         idSet.has(w.fromComp) && idSet.has(w.toComp)
     );
 
-    // ── Recover initials / counts from the inner components ─────
     if(!def.inputInitials.length){
         def.inputInitials = def.innerComps
             .filter(c => c.type === 'INPUT' || c.type === 'PUSH')
@@ -1479,12 +1493,10 @@ function loadFromLocalStorage(){
         components=state.components||[];wires=state.wires||[];customContainers=state.customContainers||[];savedCustomGates=state.savedCustomGates||{};
         nextId=state.nextId||1;panX=state.panX||0;panY=state.panY||0;zoom=state.zoom||1;
         if(state.isDark){document.body.classList.remove('light-theme');document.body.classList.add('dark-theme')}
-        // ★ Normalize every def so old-format gates open in the editor
         for(const name of Object.keys(savedCustomGates)){
             if(!savedCustomGates[name].name)savedCustomGates[name].name=name;
             normalizeCustomGateDef(savedCustomGates[name]);
         }
-        // ★ Synthesize missing defs from the live component internals
         components.forEach(comp => {
             if(comp.isCustom && comp.type && Array.isArray(comp.subComps) && comp.subComps.length > 0){
                 const ex = savedCustomGates[comp.type];
@@ -1559,7 +1571,6 @@ function openCustomGateModal(gateType,isEditing){
     const nameInput=document.getElementById('custom-gate-name-input');
     const colorInput=document.getElementById('custom-gate-color-input');
 
-    // Show the Delete button only when editing an existing gate
     const delBtn = document.getElementById('modal-delete-gate-btn');
     if (delBtn) delBtn.style.display = (isEditing && gateType && savedCustomGates[gateType]) ? 'inline-block' : 'none';
 
@@ -1585,7 +1596,7 @@ function openCustomGateModal(gateType,isEditing){
     modal.style.display='flex';
     markModalPortPositionsDirty();
     requestAnimationFrame(()=>{
-        fitModalToContents();      /* ★ centre + auto-zoom to fit */
+        fitModalToContents();
         drawModalWires();
         runModalSimulation();
     });
@@ -1615,7 +1626,6 @@ async function deleteCurrentCustomGate(){
     const ok = await showConfirm('Delete Custom Gate', `Delete "${gateName}" and all its instances everywhere?`);
     if(!ok) return;
 
-    // 1. Remove every top-level instance of this gate from the canvas
     const removedIds = new Set();
     components = components.filter(c => {
         if(c.isCustom && c.type === gateName){
@@ -1627,7 +1637,6 @@ async function deleteCurrentCustomGate(){
         return true;
     });
 
-    // 2. Recursively strip any nested references inside other custom gates
     (function stripNested(list){
         list.forEach(c => {
             if(c.subComps){
@@ -1642,16 +1651,13 @@ async function deleteCurrentCustomGate(){
         });
     })(components);
 
-    // 3. Drop any wires that touched a removed instance
     wires = wires.filter(w =>
         components.some(c => c.id === w.fromComp) &&
         components.some(c => c.id === w.toComp)
     );
 
-    // 4. Delete the definition
     delete savedCustomGates[gateName];
 
-    // 5. Close the editor and refresh the UI
     closeCustomGateModal(false);
 
     updateCustomGatesToolbar();
@@ -1701,7 +1707,6 @@ function setupModalEventListeners(){
     vp.addEventListener('mousedown',e=>{
         if(e.target.closest('.gate')||e.target.closest('.port'))return;
         if(e.shiftKey){
-            // ★ box-select in editor
             startModalBoxSelect(e);
             e.preventDefault();
             return;
@@ -1791,7 +1796,8 @@ function pasteModalAtCursor(){
         const cl=JSON.parse(JSON.stringify(c));cl.id=nid;cl.x=modalSnapValue(c.x+ox);cl.y=modalSnapValue(c.y+oy);
         if(cl.type==='INPUT'||cl.type==='PUSH'){cl.state=0;cl.outputVal=0}
         if(cl.type==='DELAY'){cl.delayMs=cl.delayMs||(Number(cl.delayVal)||3)*TICK_MS;cl.delayQueue=null}
-        if(cl.type==='CLOCK'){cl.clockCounter=0;cl.state=0;cl.outputVal=0}
+        if(cl.type==='CLOCK'){cl.clockMs=cl.clockMs||(Number(cl.clockVal)||5)*TICK_MS;cl.clockCounter=0;cl.state=0;cl.outputVal=0}
+        if(cl.type==='PULSE'){cl.pulseCounter=0;cl.pulsePrevInput=0;cl.state=0;cl.outputVal=0}
         if(cl.isCustom){
             const dn=cl._defName||cl.type;
             if(savedCustomGates[dn]){cl.def=savedCustomGates[dn];cl.type=dn}
@@ -1861,7 +1867,7 @@ function fitModalToContents(padding=48){
     const vp=document.getElementById('custom-gate-modal-viewport');
     if(!vp||!modalComponents.length)return;
     const r=vp.getBoundingClientRect();
-    if(r.width<10||r.height<10)return;      /* not laid out yet */
+    if(r.width<10||r.height<10)return;
 
     let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
     modalComponents.forEach(c=>{
@@ -1881,7 +1887,7 @@ function fitModalToContents(padding=48){
     const availH=Math.max(40,r.height-padding*2);
 
     let z=Math.min(availW/cw,availH/ch);
-    z=Math.max(0.15,Math.min(1.6,z));         /* clamp to sane bounds */
+    z=Math.max(0.15,Math.min(1.6,z));
 
     modalZoom=z;
     modalPanX=r.width/2-(minX+cw/2)*z;
@@ -1914,8 +1920,8 @@ function startModalGhostDrag(e,type){
     else if(type==='OUTPUT'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port"></div><div class="bulb"></div></div>`}
     else if(type==='NOT'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port"></div><span style="font-size:10px;">NOT</span><div class="port output"></div></div>`}
     else if(type==='DELAY'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port"></div><span style="font-size:9px;">150ms</span><div class="port output"></div></div>`}
-    else if(type==='PULSE'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port"></div><span class="pulse-led"></span><span style="font-size:9px;">100ms</span><div class="port output"></div></div>`}
-    else if(type==='CLOCK'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:9px;">⏱</span><input type="number" value="5" style="width:28px;font-size:10px;" disabled><div class="port output"></div></div>`}
+    else if(type==='PULSE'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port"></div><span style="font-size:9px;font-weight:bold;">PULSE</span><span style="font-size:9px;">1-shot</span><div class="port output"></div></div>`}
+    else if(type==='CLOCK'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port"></div><span style="font-size:9px;">⏱</span><input type="number" value="250" style="width:58px;font-size:10px;" disabled><span style="font-size:8px;opacity:.6;">ms</span><div class="port output"></div></div>`}
     else if(type==='COLOR'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port"></div><input type="color" value="#39ff14" disabled style="width:26px;height:20px;padding:1px;border-radius:3px;background:transparent;"><div class="port output"></div></div>`}
     else if(type==='SCREEN'){bc=`<div style="width:40px;height:40px;background:var(--pixel-off);position:relative;"><div class="port" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.7);width:12px;height:12px;border-radius:50%;background:#007bff;border:2px solid #fff;opacity:.5;"></div></div>`;w=40;h=40;isPixel=true}
     else{bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div><div class="port" style="margin-bottom:3px;"></div><div class="port"></div></div><span style="font-size:10px;font-weight:bold;">${type}</span><div class="port output"></div></div>`}
@@ -1945,8 +1951,8 @@ function spawnModalComponentAt(type,x,y){
     const s=modalSnapPos(x,y);
     const comp={id:modalNextId++,type,x:s.x,y:s.y,state:0,outputVal:0,customLabel:'',
         delayMs:type==='DELAY'?150:undefined,delayQueue:type==='DELAY'?new Array(3).fill(0):undefined,
-        pulseMs:type==='PULSE'?100:undefined,pulseCounter:type==='PULSE'?0:undefined,
-        clockVal:type==='CLOCK'?5:undefined,clockCounter:type==='CLOCK'?0:undefined,
+        pulseCounter:type==='PULSE'?0:undefined,pulsePrevInput:type==='PULSE'?0:undefined,
+        clockMs:type==='CLOCK'?250:undefined,clockCounter:type==='CLOCK'?0:undefined,
         pixelColor:type==='COLOR'?'#39ff14':undefined,
         pixelWidth:type==='SCREEN'?40:undefined,pixelHeight:type==='SCREEN'?40:undefined};
     if(savedCustomGates[type]){
@@ -1960,7 +1966,7 @@ function spawnModalComponentAt(type,x,y){
             if(sc.isCustom&&sc.type&&savedCustomGates[sc.type])sc.def=savedCustomGates[sc.type];
             initComponentInputs(sc);
             if(sc.type==='DELAY'){const v=delayTicksFor(sc);sc.delayQueue=new Array(v).fill(0);comp.delayStates[sc.id]={queue:new Array(v).fill(0),ptr:0}}
-            if(sc.type==='CLOCK')comp.clockStates[sc.id]={counter:0,state:0,period:sc.clockVal||5};
+            if(sc.type==='CLOCK')comp.clockStates[sc.id]={counter:0,state:0,period:clockTicksFor(sc)};
         });
     }else initComponentInputs(comp);
     modalComponents.push(comp);renderModalComponent(comp);
@@ -1987,9 +1993,9 @@ function renderModalComponent(comp){
     else if(comp.type==='PUSH'){tt='Push';bc=`<div class="io-port-row"><button class="push-btn" id="modal-push-${comp.id}">PRESS</button><div style="display:flex;align-items:center;gap:3px;"><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div><input type="text" class="port-label-input" placeholder="Name" value="${comp.customLabel||''}" id="modal-label-${comp.id}"></div></div>`}
     else if(comp.type==='OUTPUT'){tt='OUT';bc=`<div class="io-port-row" style="flex-direction:row-reverse;"><div class="bulb"></div><div style="display:flex;align-items:center;gap:3px;"><div class="port" id="modal-port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><input type="text" class="port-label-input" placeholder="Name" value="${comp.customLabel||''}" id="modal-label-${comp.id}"></div></div>`}
     else if(comp.type==='NOT'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port" id="modal-port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><span style="font-size:10px;font-weight:bold;">NOT</span><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
-    else if(comp.type==='DELAY'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="modal-port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><input type="number" min="50" max="20000" step="50" value="${comp.delayMs||150}" class="delay-input" id="modal-delay-val-${comp.id}" title="Delay in milliseconds"><span style="font-size:8px;opacity:.6;">ms</span><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
-    else if(comp.type==='PULSE'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="modal-port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><span class="pulse-led ${comp.state===1?'on':''}"></span><input type="number" min="50" max="20000" step="50" value="${comp.pulseMs||100}" class="delay-input" id="modal-pulse-val-${comp.id}" title="Pulse period in milliseconds"><span style="font-size:8px;opacity:.6;">ms</span><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
-    else if(comp.type==='CLOCK'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:9px;">⏱</span><input type="number" min="1" max="999" value="${comp.clockVal||5}" class="delay-input" id="modal-clock-val-${comp.id}"><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
+    else if(comp.type==='DELAY'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="modal-port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><input type="number" min="1" max="20000" step="1" value="${comp.delayMs||150}" class="delay-input" id="modal-delay-val-${comp.id}" title="Delay in milliseconds (1 – 20000)"><span style="font-size:8px;opacity:.6;">ms</span><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
+    else if(comp.type==='PULSE'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="modal-port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><span style="font-size:9px;font-weight:bold;">PULSE</span><span style="font-size:8px;opacity:.6;">1-shot</span><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
+    else if(comp.type==='CLOCK'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="modal-port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><span style="font-size:9px;">⏱</span><input type="number" min="50" max="20000" step="1" value="${comp.clockMs||250}" class="delay-input" id="modal-clock-val-${comp.id}" title="Toggle period in milliseconds (50 – 20000)"><span style="font-size:8px;opacity:.6;">ms</span><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
     else if(comp.type==='COLOR'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="modal-port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><input type="color" class="color-picker-input" value="${comp.pixelColor||'#39ff14'}" id="modal-color-val-${comp.id}"><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
     else if(comp.type==='SCREEN'){tt='Pixel';const w=comp.pixelWidth||40,h=comp.pixelHeight||40;
         bc=`<div style="position:relative;display:inline-block;width:${w}px;height:${h}px;"><div class="pixel-square" id="modal-pixel-${comp.id}"><div class="port" id="modal-port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div></div></div>`;
@@ -2002,7 +2008,6 @@ function renderModalComponent(comp){
     else{bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div style="display:flex;flex-direction:column;gap:4px;"><div class="port" id="modal-port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><div class="port" id="modal-port-${comp.id}-in-1" data-comp="${comp.id}" data-type="in" data-port="1"></div></div><span style="font-size:10px;font-weight:bold;">${comp.type}</span><div class="port output" id="modal-port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
     const hr=`<button class="delete-btn" data-modal-delete="${comp.id}">×</button>`;
     el.innerHTML=`<div class="gate-header" onmousedown="startDragModalGate(event,${comp.id})" ontouchstart="startDragModalGate(event,${comp.id})"><span>${tt}</span>${hr}</div><div class="gate-body">${bc}</div>`;
-    // ★ explicit delete handler that stops propagation before drag starts
     const delBtn=el.querySelector('[data-modal-delete]');
     if(delBtn){
         const doDel=(e)=>{e.stopPropagation();e.preventDefault();removeModalComponent(comp.id)};
@@ -2012,9 +2017,8 @@ function renderModalComponent(comp){
     if(comp.type==='INPUT'){const b=el.querySelector(`#modal-sw-${comp.id}`);const tg=e=>{e.preventDefault();e.stopPropagation();comp.state=comp.state===0?1:0;comp.outputVal=comp.state;b.classList.toggle('active',comp.state===1);b.innerText=comp.state===1?'ON':'OFF';runModalSimulation()};b.addEventListener('click',tg);b.addEventListener('touchstart',tg,{passive:false})}
     if(comp.type==='PUSH'){const b=el.querySelector(`#modal-push-${comp.id}`);const ps=e=>{e.preventDefault();e.stopPropagation();comp.state=1;comp.outputVal=1;b.classList.add('active');b.innerText='ON';runModalSimulation()};const pe=e=>{e.preventDefault();e.stopPropagation();comp.state=0;comp.outputVal=0;b.classList.remove('active');b.innerText='PRESS';runModalSimulation()};b.addEventListener('mousedown',ps);b.addEventListener('mouseup',pe);b.addEventListener('mouseleave',pe);b.addEventListener('touchstart',ps,{passive:false});b.addEventListener('touchend',pe,{passive:false})}
     if(comp.type==='INPUT'||comp.type==='OUTPUT'||comp.type==='PUSH'){const inp=el.querySelector(`#modal-label-${comp.id}`);if(inp){inp.addEventListener('input',e=>{comp.customLabel=e.target.value});inp.addEventListener('mousedown',e=>e.stopPropagation());inp.addEventListener('touchstart',e=>e.stopPropagation())}}
-    if(comp.type==='DELAY'){const i=el.querySelector(`#modal-delay-val-${comp.id}`);i.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(i.value)||150;v=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,v));comp.delayMs=Math.round(v/TICK_MS)*TICK_MS;i.value=comp.delayMs;ensureDelayQueue(comp)});i.addEventListener('mousedown',e=>e.stopPropagation())}
-    if(comp.type==='PULSE'){const i=el.querySelector(`#modal-pulse-val-${comp.id}`);i.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(i.value)||100;v=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,v));comp.pulseMs=Math.round(v/TICK_MS)*TICK_MS;i.value=comp.pulseMs;comp.pulseCounter=0});i.addEventListener('mousedown',e=>e.stopPropagation())}
-    if(comp.type==='CLOCK'){const i=el.querySelector(`#modal-clock-val-${comp.id}`);i.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(i.value)||1;v=Math.max(1,Math.min(999,v));comp.clockVal=v;comp.clockCounter=0});i.addEventListener('mousedown',e=>e.stopPropagation())}
+    if(comp.type==='DELAY'){const i=el.querySelector(`#modal-delay-val-${comp.id}`);i.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(i.value)||150;v=Math.max(1,Math.min(TICK_MS*MAX_TICKS,v));comp.delayMs=Math.round(v);i.value=comp.delayMs;ensureDelayQueue(comp)});i.addEventListener('mousedown',e=>e.stopPropagation())}
+    if(comp.type==='CLOCK'){const i=el.querySelector(`#modal-clock-val-${comp.id}`);i.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(i.value)||250;v=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,v));comp.clockMs=Math.round(v);i.value=comp.clockMs;comp.clockCounter=0});i.addEventListener('mousedown',e=>e.stopPropagation())}
     if(comp.type==='COLOR'){const i=el.querySelector(`#modal-color-val-${comp.id}`);i.addEventListener('input',e=>{e.stopPropagation();comp.pixelColor=e.target.value});i.addEventListener('mousedown',e=>e.stopPropagation())}
     document.getElementById('custom-gate-modal-canvas').appendChild(el);
     attachPortHandlers(el,'modal');
@@ -2050,7 +2054,6 @@ function startDragModalGate(e,id){
     const cx=e.clientX||(e.touches&&e.touches[0].clientX)||0,cy=e.clientY||(e.touches&&e.touches[0].clientY)||0;
     modalGateGrabOffsetX=(cx-vpR.left-modalPanX)/modalZoom-comp.x;
     modalGateGrabOffsetY=(cy-vpR.top-modalPanY)/modalZoom-comp.y;
-    /* ★ multi-selection group drag — mirrors the main canvas behaviour */
     if(modalSelectedIds.size>1&&modalSelectedIds.has(id)){
         modalGroupDragStartPositions=new Map();
         modalSelectedIds.forEach(sid=>{const sc=modalComponents.find(c=>c.id===sid);if(sc)modalGroupDragStartPositions.set(sid,{x:sc.x,y:sc.y})});
@@ -2065,7 +2068,6 @@ function moveModalDraggedGate(cx,cy){
     const nX=modalSnapValue(mx-modalGateGrabOffsetX),nY=modalSnapValue(my-modalGateGrabOffsetY);
     activeModalComp.x=nX;activeModalComp.y=nY;
     const el=document.getElementById(`modal-comp-${activeModalComp.id}`);if(el){el.style.left=nX+'px';el.style.top=nY+'px'}
-    /* ★ drag the rest of the selection along with the anchor */
     if(modalGroupDragStartPositions){
         const dx=nX-modalGroupDragAnchorStartX,dy=nY-modalGroupDragAnchorStartY;
         modalGroupDragStartPositions.forEach((sp,sid)=>{
@@ -2092,9 +2094,6 @@ function loadDefIntoModal(def, gateKey){
     clearModalCanvas();
     normalizeCustomGateDef(def);
 
-    // ★ Prefer the LIVE instance's internals over the stored definition.
-    //   The live component always has the working subComps/subWires; the def
-    //   may be empty on imported / older files.
     const liveInst = components.find(c =>
         c.isCustom &&
         (c.type === gateKey || c.type === def.name) &&
@@ -2110,8 +2109,6 @@ function loadDefIntoModal(def, gateKey){
         sourceWires = def.innerWires || [];
     }
 
-    // ★ If we recovered internals from a live instance and the def was empty,
-    //   permanently repair the definition so future opens / spawns work too.
     if(liveInst && (!def.innerComps || def.innerComps.length === 0) && sourceComps.length){
         def.innerComps = sourceComps.map(sc => {
             const c2 = JSON.parse(JSON.stringify(sc));
@@ -2140,7 +2137,6 @@ function loadDefIntoModal(def, gateKey){
         showToast('No stored internals for this gate — build them below and press OK.', 'info', 4500);
     }
 
-    // ── Render components with a fresh, guaranteed-unique id mapping ──
     const idMap = {};
     const seen  = new Set();
     let maxNumericId = 0;
@@ -2177,7 +2173,6 @@ function loadDefIntoModal(def, gateKey){
 
     modalNextId = maxNumericId + 1;
 
-    // ── Remap wires to the new ids ──
     sourceWires.forEach(w => {
         const from = idMap[w.fromComp];
         const to   = idMap[w.toComp];
@@ -2232,14 +2227,12 @@ function buildGateFromModal(gateName,gateColor){
     const inputInitials=innerInputs.map(c=>{const n=(c.customLabel||'').trim();return n?n.toUpperCase():(c.type==='INPUT'?'T':'P')});
     const outputInitials=innerOutputs.map(c=>{const n=(c.customLabel||'').trim();return n?n.toUpperCase():''});
 
-    // ★ IMPORTANT: KEEP the inputs array (don't delete) so the gate works when spawned.
     const storedInnerComps=innerComps.map(c=>{
         const cl=JSON.parse(JSON.stringify(c));
         if(cl.isCustom&&cl.def)cl._defName=cl.def.name||cl.type;
         delete cl.def;delete cl.delayQueue;delete cl.subComps;delete cl.subWires;
         delete cl.delayStates;delete cl.clockStates;delete cl.outputsArray;
         cl.state=0;cl.outputVal=0;
-        // Ensure inputs is present and correctly sized
         initComponentInputs(cl);
         return cl;
     });

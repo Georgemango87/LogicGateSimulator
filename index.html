@@ -72,7 +72,10 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
 .instructions-close{position:absolute;top:4px;right:4px;background:transparent;border:none;color:var(--text-color);font-size:16px;cursor:pointer;line-height:1;padding:0 4px;border-radius:3px;opacity:.5;pointer-events:auto}
 .wire-path{stroke:#666;stroke-width:3.5;fill:none;cursor:pointer;pointer-events:stroke;stroke-linecap:round;transition:stroke .15s,stroke-width .15s}
 .wire-path.powered{stroke:#28a745}
-.wire-path:hover{stroke:#dc3545!important;stroke-width:5}
+.wire-path:hover{stroke:#3b82f6;stroke-width:4.5}
+.wire-path.powered:hover{stroke:#22c55e;stroke-width:4.5}
+.wire-path.selected{stroke:#ffc107!important;stroke-width:5}
+.wire-path.selected:hover{stroke:#ffc107!important}
 #ghost-gate{position:absolute;background:var(--gate-bg);border:2px dashed var(--gate-color,#007bff);border-radius:6px;opacity:.9;pointer-events:none;display:none;z-index:1000;box-shadow:0 4px 10px rgba(0,0,0,.15);transform-origin:0 0;width:140px;height:auto;min-width:140px}
 #ghost-gate .gate-header{background:var(--gate-color,#007bff);color:#fff;padding:4px 6px;font-size:10px;display:flex;justify-content:space-between;align-items:center;border-top-left-radius:4px;border-top-right-radius:4px;gap:4px;min-height:26px}
 #ghost-gate .gate-body{background:var(--gate-bg);border-bottom-left-radius:6px;border-bottom-right-radius:6px;padding:6px;display:flex;flex-direction:column;gap:4px;color:var(--text-color)}
@@ -303,7 +306,9 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
     • <strong>Right-click a folder</strong> to rename, recolor, or delete it.<br />
     • <strong>Right-click a custom gate</strong> (toolbar or canvas) to edit it.<br />
     • <strong>Shift+drag</strong> to box-select, <strong>Shift+click</strong> to multi-select.<br />
-    • <strong>Click an output port</strong> to enter pour mode (orange), click inputs to wire.<br />
+ • <strong>Click an output port</strong> to enter pour mode (orange), click inputs to wire.<br />
+    • <strong>Shift+click an input port</strong> to wire from the next selected source (round-robin).<br />
+    • <strong>Click a wire</strong> to select (yellow) • <strong>double-click</strong> or <strong>right-click</strong> a wire to delete it.<br />
     • <strong>Ctrl+C / Ctrl+V</strong> to copy &amp; paste selected gates.<br />
     • <strong>Undo/Redo</strong>: Ctrl+Z / Ctrl+Shift+Z.
 </div>
@@ -315,15 +320,18 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
 let components=[],wires=[],customContainers=[],savedCustomGates={};
 let savedFolders={};                     /* { name: {name,color} } */
 let toastsEnabled=localStorage.getItem('toasts_enabled')!=='false';
-let draggingWire=null,nextId=1,isPaused=false;
+let draggingWire=null,nextId=1,nextWireId=1,isPaused=false;
 let panX=0,panY=0,zoom=1,isPanning=false,startPanX=0,startPanY=0;
 let initialPinchDistance=null,initialZoom=1;
 let ghostType=null,ghostSourceFolder='',wirePouringState=null;
-let selectedIds=new Set(),isBoxSelecting=false;
+let selectedIds=new Set(),selectedWireIds=new Set(),isBoxSelecting=false;
 let boxSelectStartX=0,boxSelectStartY=0,boxSelectStartScreenX=0,boxSelectStartScreenY=0;
 let selectedSourceIndex=0,lastSelectionSignature='';
 let clipboard=null,cursorCanvasX=0,cursorCanvasY=0;
 let portPositions={},portPositionsDirty=true,zoomThrottleTimer=null;
+const compEls=new Map();            /* comp.id → root .gate element */
+const compPortEls=new Map();        /* comp.id → {in:[], out:[]} */
+const dirtyPortComponents=new Set();/* comp ids whose port screen-positions changed */
 let openFolderName=null;
 
 const viewport=document.getElementById('viewport');
@@ -349,12 +357,20 @@ let modalIsBoxSelecting=false;
 let modalBoxSelectStartX=0,modalBoxSelectStartY=0;
 let modalBoxSelectScreenX=0,modalBoxSelectScreenY=0;
 let modalClipboard=null,modalCursorCanvasX=0,modalCursorCanvasY=0;
+let modalNextWireId=1;
+let modalSelectedWireIds=new Set();
 const modalSelectionBoxEl=document.getElementById('custom-gate-modal-selection-box');
 let customGateModalIsEditing=false,customGateModalEditingType=null;
 
 /* undo/redo */
 let undoStack=[],redoStack=[];
-const MAX_HISTORY=100;let isUndoRedo=false,lastSaveTime=0;const SAVE_DEBOUNCE=50;
+const MAX_HISTORY=100;let isUndoRedo=false,lastSaveTime=0;
+/* Rapid-fire edits (wiring bursts, group drags, label typing) are
+   coalesced into a single history entry. When forceSaveState() is called
+   within SNAPSHOT_COALESCE_MS of the previous snapshot, the snapshot is
+   deferred and rescheduled, so a burst becomes one undo step. */
+const SNAPSHOT_COALESCE_MS=350;
+let pendingSnapshotTimer=null;
 
 /* colors */
 const GATE_COLORS={INPUT:'#2563eb',PUSH:'#6c5ce7',OUTPUT:'#f59e0b',AND:'#16a34a',OR:'#8b5cf6',XOR:'#ec4899',NOT:'#ef4444',NAND:'#0f766e',NOR:'#7c3aed',XNOR:'#0891b2',DELAY:'#64748b',CLOCK:'#0d9488',PULSE:'#f43f5e',SCREEN:'#d97706',COLOR:'#db2777'};
@@ -500,27 +516,109 @@ function moveGateToFolder(gateName,folderName){
 }
 
 /* undo/redo */
-function _snap(){return{
-    components:JSON.parse(JSON.stringify(components)),
-    wires:JSON.parse(JSON.stringify(wires)),
-    customContainers:JSON.parse(JSON.stringify(customContainers)),
-    savedCustomGates:JSON.parse(JSON.stringify(savedCustomGates)),
-    savedFolders:JSON.parse(JSON.stringify(savedFolders))
-}}
-function saveState(){if(isUndoRedo)return;const n=Date.now();if(n-lastSaveTime<SAVE_DEBOUNCE)return;lastSaveTime=n;undoStack.push(_snap());if(undoStack.length>MAX_HISTORY)undoStack.shift();redoStack=[];updateUndoRedoButtons();saveToLocalStorage()}
-function forceSaveState(){if(isUndoRedo)return;undoStack.push(_snap());if(undoStack.length>MAX_HISTORY)undoStack.shift();redoStack=[];updateUndoRedoButtons();saveToLocalStorage();lastSaveTime=Date.now()}
-function restoreState(s){isUndoRedo=true;components.forEach(c=>{const el=document.getElementById(`comp-${c.id}`);if(el)el.remove()});customContainers.forEach(c=>{const el=document.getElementById(`container-${c.id}`);if(el)el.remove()});components=s.components;wires=s.wires;customContainers=s.customContainers;savedCustomGates=s.savedCustomGates;savedFolders=s.savedFolders||{};updateCustomGatesToolbar();components.forEach(c=>renderComponent(c));customContainers.forEach(c=>renderCustomContainer(c));drawWires();runSimulation();isUndoRedo=false;markPortPositionsDirty();updateUndoRedoButtons()}
-function undo(){if(!undoStack.length)return;redoStack.push(_snap());restoreState(undoStack.pop());showToast('Undo','info',1000)}
-function redo(){if(!redoStack.length)return;undoStack.push(_snap());restoreState(redoStack.pop());showToast('Redo','info',1000)}
-function updateUndoRedoButtons(){const u=document.getElementById('undo-btn'),r=document.getElementById('redo-btn');if(u)u.disabled=!undoStack.length;if(r)r.disabled=!redoStack.length}
+function _snap(){
+    /* structuredClone is materially faster than a JSON round-trip on the
+       large object graphs a big circuit produces, and our data is plain
+       (no functions, no class instances). Falls back to JSON for the
+       (rare) environments without structuredClone. */
+    const clone=typeof structuredClone==='function'
+        ? structuredClone
+        : (x)=>JSON.parse(JSON.stringify(x));
+    return{
+        components:clone(components),
+        wires:clone(wires),
+        customContainers:clone(customContainers),
+        savedCustomGates:clone(savedCustomGates),
+        savedFolders:clone(savedFolders)
+    };
+}
+function pushSnapshotNow(){
+    if(isUndoRedo)return;
+    if(pendingSnapshotTimer){clearTimeout(pendingSnapshotTimer);pendingSnapshotTimer=null}
+    undoStack.push(_snap());
+    if(undoStack.length>MAX_HISTORY)undoStack.shift();
+    redoStack=[];
+    updateUndoRedoButtons();
+    saveToLocalStorage();
+    lastSaveTime=Date.now();
+}
+function forceSaveState(){
+    if(isUndoRedo)return;
+    const now=Date.now();
+    if(now-lastSaveTime<SNAPSHOT_COALESCE_MS){
+        /* Reschedule the pending snapshot so a continuous burst of edits
+           does not create a snapshot per event. */
+        if(pendingSnapshotTimer)clearTimeout(pendingSnapshotTimer);
+        pendingSnapshotTimer=setTimeout(()=>{
+            pendingSnapshotTimer=null;
+            pushSnapshotNow();
+        },SNAPSHOT_COALESCE_MS);
+        lastSaveTime=now;
+        return;
+    }
+    pushSnapshotNow();
+}
+function restoreState(s){isUndoRedo=true;for(const el of compEls.values())el.remove();compEls.clear();compPortEls.clear();dirtyPortComponents.clear();portPositionsDirty=true;customContainers.forEach(c=>{const el=document.getElementById(`container-${c.id}`);if(el)el.remove()});components=s.components;wires=s.wires;customContainers=s.customContainers;savedCustomGates=s.savedCustomGates;savedFolders=s.savedFolders||{};adoptWireIds();selectedWireIds.clear();updateCustomGatesToolbar();components.forEach(c=>renderComponent(c));customContainers.forEach(c=>renderCustomContainer(c));drawWires();runSimulation();isUndoRedo=false;markPortPositionsDirty();updateUndoRedoButtons()}
+/* The top of undoStack always represents the current state (forceSaveState
+   captures post-edit state). To undo, we drop the top — saving it on the
+   redo stack — and restore the new top. The initial state is seeded at
+   load time so the very first edit is undoable. */
+function undo(){
+    if(pendingSnapshotTimer){clearTimeout(pendingSnapshotTimer);pendingSnapshotTimer=null;pushSnapshotNow()}
+    if(undoStack.length<2)return;
+    redoStack.push(undoStack.pop());
+    restoreState(undoStack[undoStack.length-1]);
+    showToast('Undo','info',1000);
+}
+function redo(){
+    if(pendingSnapshotTimer){clearTimeout(pendingSnapshotTimer);pendingSnapshotTimer=null;pushSnapshotNow()}
+    if(!redoStack.length)return;
+    undoStack.push(redoStack.pop());
+    restoreState(undoStack[undoStack.length-1]);
+    showToast('Redo','info',1000);
+}
+function updateUndoRedoButtons(){
+    const u=document.getElementById('undo-btn'),r=document.getElementById('redo-btn');
+    if(u)u.disabled=undoStack.length<2;
+    if(r)r.disabled=!redoStack.length;
+}
 
 /* port positions */
-function markPortPositionsDirty(){portPositionsDirty=true}
+function markPortPositionsDirty(componentId){
+    if(componentId===undefined){
+        portPositionsDirty=true;
+        dirtyPortComponents.clear();
+    }else{
+        dirtyPortComponents.add(componentId);
+    }
+}
 function updatePortPositions(){
-    if(!portPositionsDirty)return;portPositionsDirty=false;
-    const vpRect=viewport.getBoundingClientRect(),els=canvas.querySelectorAll('.port'),np={};
-    for(let i=0;i<els.length;i++){const p=els[i];const k=`${p.dataset.comp}-${p.dataset.type}-${p.dataset.port}`;const r=p.getBoundingClientRect();np[k]={x:(r.left+r.width/2-vpRect.left-panX)/zoom,y:(r.top+r.height/2-vpRect.top-panY)/zoom}}
-    portPositions=np;
+    if(!portPositionsDirty&&dirtyPortComponents.size===0)return;
+    const vpRect=viewport.getBoundingClientRect();
+    const toUpdate=[];
+    if(portPositionsDirty){
+        portPositions={};
+        for(const id of compPortEls.keys())toUpdate.push(id);
+        portPositionsDirty=false;
+        dirtyPortComponents.clear();
+    }else{
+        for(const id of dirtyPortComponents)if(compPortEls.has(id))toUpdate.push(id);
+        dirtyPortComponents.clear();
+    }
+    for(let i=0;i<toUpdate.length;i++){
+        const compId=toUpdate[i],pc=compPortEls.get(compId);
+        if(!pc)continue;
+        const lists=[[pc.in,'in'],[pc.out,'out']];
+        for(let li=0;li<2;li++){
+            const arr=lists[li][0],type=lists[li][1];
+            for(let j=0;j<arr.length;j++){
+                const p=arr[j];if(!p)continue;
+                const k=`${compId}-${type}-${j}`;
+                const r=p.getBoundingClientRect();
+                portPositions[k]={x:(r.left+r.width/2-vpRect.left-panX)/zoom,y:(r.top+r.height/2-vpRect.top-panY)/zoom};
+            }
+        }
+    }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -549,7 +647,7 @@ function updateModalGridBackground(){
 /* transform */
 function updateTransform(){canvas.style.transform=`translate(${panX}px,${panY}px) scale(${zoom})`;updateGridBackground()}
 function applyZoom(nz,ox,oy){nz=Math.max(.1,Math.min(5,nz));const r=viewport.getBoundingClientRect();const mx=ox-r.left,my=oy-r.top;panX=mx-(mx-panX)*(nz/zoom);panY=my-(my-panY)*(nz/zoom);zoom=nz;updateTransform();if(zoomThrottleTimer)cancelAnimationFrame(zoomThrottleTimer);zoomThrottleTimer=requestAnimationFrame(()=>{zoomThrottleTimer=null;markPortPositionsDirty();drawWires();saveToLocalStorage()})}
-function startPan(e){if(e.target.closest('.gate')||e.target.closest('.custom-container-wrapper')||e.target.closest('#toolbar'))return;if(e.shiftKey){startBoxSelect(e);e.stopPropagation();return}if(!e.shiftKey&&selectedIds.size)clearSelection();isPanning=true;startPanX=e.clientX-panX;startPanY=e.clientY-panY;e.stopPropagation()}
+function startPan(e){if(e.target.closest('.gate')||e.target.closest('.custom-container-wrapper')||e.target.closest('#toolbar'))return;if(e.shiftKey){startBoxSelect(e);e.stopPropagation();return}if(!e.shiftKey){if(selectedIds.size)clearSelection();if(selectedWireIds.size)clearWireSelection()}isPanning=true;startPanX=e.clientX-panX;startPanY=e.clientY-panY;e.stopPropagation()}
 function startTouchPanZoom(e){if(e.target.closest('.gate')||e.target.closest('.custom-container-wrapper')||e.target.closest('#toolbar'))return;if(e.touches.length===2){initialPinchDistance=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);initialZoom=zoom;isPanning=false}else if(e.touches.length===1){isPanning=true;startPanX=e.touches[0].clientX-panX;startPanY=e.touches[0].clientY-panY}e.stopPropagation()}
 function handleZoom(e){e.preventDefault();const zf=1.1;applyZoom(e.deltaY<0?zoom*zf:zoom/zf,e.clientX,e.clientY)}
 function resetView(){panX=0;panY=0;zoom=1;updateTransform();markPortPositionsDirty();saveToLocalStorage()}
@@ -598,7 +696,7 @@ function pasteAtCursor(){
         }
         initComponentInputs(cl);nc.push(cl);
     }
-    const nw=clipboard.wires.map(w=>({fromComp:idMap[w.fromComp],fromPort:w.fromPort,toComp:idMap[w.toComp],toPort:w.toPort})).filter(w=>w.fromComp!==undefined&&w.toComp!==undefined);
+    const nw=clipboard.wires.filter(w=>idMap[w.fromComp]!==undefined&&idMap[w.toComp]!==undefined).map(w=>newWire(idMap[w.fromComp],w.fromPort,idMap[w.toComp],w.toPort));
     components.push(...nc);wires.push(...nw);
     nc.forEach(c=>renderComponent(c));
     clearSelection();
@@ -729,7 +827,7 @@ function handleEnd(cx,cy){
         if(t&&t.classList.contains('port')&&t.getAttribute('data-type')==='in'){
             const tc=parseInt(t.getAttribute('data-comp')),tp=parseInt(t.getAttribute('data-port'));
             wires=wires.filter(w=>!(w.toComp===tc&&w.toPort===tp));
-            wires.push({fromComp:draggingWire.compId,fromPort:draggingWire.portIndex,toComp:tc,toPort:tp});
+            wires.push(newWire(draggingWire.compId,draggingWire.portIndex,tc,tp));
             runSimulation();drawWires();forceSaveState();
         }
         resetWiring();
@@ -750,7 +848,7 @@ function connectWireInPourMode(tc,tp){
     const fc=wirePouringState.compId,fp=wirePouringState.portIndex;
     if(wires.some(w=>w.fromComp===fc&&w.fromPort===fp&&w.toComp===tc&&w.toPort===tp)){showToast('Wire already exists.','info',800);return false}
     wires=wires.filter(w=>!(w.toComp===tc&&w.toPort===tp));
-    wires.push({fromComp:fc,fromPort:fp,toComp:tc,toPort:tp});
+    wires.push(newWire(fc,fp,tc,tp));
     markPortPositionsDirty();runSimulation();drawWires();forceSaveState();
     const ie=document.querySelector(`.port[data-comp="${tc}"][data-type="in"][data-port="${tp}"]`);
     if(ie){ie.style.transition='box-shadow .15s';ie.style.boxShadow='0 0 20px #28a745';setTimeout(()=>{ie.style.boxShadow=''},300)}
@@ -761,7 +859,7 @@ function wireFromSelectedSource(tc,tp){
     const fp=0;
     if(wires.some(w=>w.fromComp===s.id&&w.fromPort===fp&&w.toComp===tc&&w.toPort===tp)){showToast(`Wire from ${s.type||'gate'} already exists.`,'info',800);return true}
     wires=wires.filter(w=>!(w.toComp===tc&&w.toPort===tp));
-    wires.push({fromComp:s.id,fromPort:fp,toComp:tc,toPort:tp});
+    wires.push(newWire(s.id,fp,tc,tp));
     markPortPositionsDirty();runSimulation();drawWires();forceSaveState();
     const ie=document.querySelector(`.port[data-comp="${tc}"][data-type="in"][data-port="${tp}"]`);
     if(ie){ie.style.transition='box-shadow .15s';ie.style.boxShadow='0 0 20px #28a745';setTimeout(()=>{ie.style.boxShadow=''},300)}
@@ -794,12 +892,17 @@ document.addEventListener('keydown',e=>{
     if(mOpen){
         if(ctrl&&e.key==='c'){e.preventDefault();copyModalSelected();return}
         if(ctrl&&e.key==='v'){e.preventDefault();pasteModalAtCursor();return}
-        if((e.key==='Delete'||e.key==='Backspace')&&modalSelectedIds.size&&document.activeElement?.tagName!=='INPUT'){
-            e.preventDefault();
-            const ids=Array.from(modalSelectedIds);
-            ids.forEach(id=>removeModalComponent(id));
-            modalSelectedIds.clear();modalSelectedSourceIndex=0;
-            showToast(`Deleted ${ids.length} component${ids.length>1?'s':''}.`,'info');
+        if((e.key==='Delete'||e.key==='Backspace')&&document.activeElement?.tagName!=='INPUT'){
+            if(modalSelectedIds.size){
+                e.preventDefault();
+                const ids=Array.from(modalSelectedIds);
+                ids.forEach(id=>removeModalComponent(id));
+                modalSelectedIds.clear();modalSelectedSourceIndex=0;
+                showToast(`Deleted ${ids.length} component${ids.length>1?'s':''}.`,'info');
+            }else if(modalSelectedWireIds.size){
+                e.preventDefault();
+                deleteSelectedModalWires();
+            }
         }
         return;
     }
@@ -807,12 +910,17 @@ document.addEventListener('keydown',e=>{
     if((ctrl&&e.key==='z'&&e.shiftKey)||(ctrl&&e.key==='y')){e.preventDefault();redo();return}
     if(ctrl&&e.key==='c'){e.preventDefault();copySelected();return}
     if(ctrl&&e.key==='v'){e.preventDefault();pasteAtCursor();return}
-    if((e.key==='Delete'||e.key==='Backspace')&&selectedIds.size&&document.activeElement?.tagName!=='INPUT'){
-        e.preventDefault();
-        const ids=Array.from(selectedIds);
-        ids.forEach(id=>removeComponent(id,true));
-        selectedIds.clear();resetSelectionSourceIndex();forceSaveState();
-        showToast(`Deleted ${ids.length} component${ids.length>1?'s':''}.`,'info');
+    if((e.key==='Delete'||e.key==='Backspace')&&document.activeElement?.tagName!=='INPUT'){
+        if(selectedIds.size){
+            e.preventDefault();
+            const ids=Array.from(selectedIds);
+            ids.forEach(id=>removeComponent(id,true));
+            selectedIds.clear();resetSelectionSourceIndex();forceSaveState();
+            showToast(`Deleted ${ids.length} component${ids.length>1?'s':''}.`,'info');
+        }else if(selectedWireIds.size){
+            e.preventDefault();
+            deleteSelectedWires();
+        }
     }
 });
 
@@ -885,7 +993,10 @@ function renderComponent(comp){
     const el=document.createElement('div');el.className='gate';el.id=`comp-${comp.id}`;
     el.style.setProperty('--gate-color',getGateColor(comp));
     if(comp.type==='SCREEN'){el.classList.add('gate-pixel');const w=comp.pixelWidth||40,h=comp.pixelHeight||40;
-        el.style.width=w+'px';el.style.height=h+'px';el.style.minWidth=w+'px';el.style.minHeight=h+'px';
+        el.style.setProperty('width',w+'px','important');
+        el.style.setProperty('height',h+'px','important');
+        el.style.setProperty('min-width',w+'px','important');
+        el.style.setProperty('min-height',h+'px','important');
         el.style.left=Math.round(comp.x)+'px';el.style.top=Math.round(comp.y)+'px';
     }else{el.style.width='140px';el.style.minWidth='140px';el.style.height='auto';el.style.left=comp.x+'px';el.style.top=comp.y+'px'}
     let bc='';
@@ -903,11 +1014,13 @@ function renderComponent(comp){
     else if(comp.type==='CLOCK'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><span style="font-size:9px;">⏱</span><input type="number" min="50" max="20000" step="1" value="${comp.clockMs||250}" class="delay-input" id="clock-val-${comp.id}" title="Toggle period in milliseconds (50 – 20000)"><span style="font-size:8px;opacity:.6;">ms</span><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
     else if(comp.type==='COLOR'){bc=`<div style="display:flex;justify-content:space-between;align-items:center;gap:3px;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><input type="color" class="color-picker-input" value="${comp.pixelColor||'#39ff14'}" id="color-val-${comp.id}"><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
     else if(comp.type==='SCREEN'){const w=comp.pixelWidth||40,h=comp.pixelHeight||40;
-        bc=`<div style="position:relative;display:inline-block;width:${w}px;height:${h}px;"><div class="pixel-square" id="pixel-${comp.id}"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div></div><button class="pixel-delete-btn" onclick="removeComponent(${comp.id})">✕</button><div class="pixel-resize-handle" onmousedown="startResizePixel(event,${comp.id})" ontouchstart="startResizePixel(event,${comp.id})"></div></div>`;
+        bc=`<div class="pixel-wrapper" style="position:relative;display:inline-block;width:${w}px;height:${h}px;"><div class="pixel-square" id="pixel-${comp.id}"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div></div><button class="pixel-delete-btn" onclick="removeComponent(${comp.id})">✕</button><div class="pixel-resize-handle" onmousedown="startResizePixel(event,${comp.id})" ontouchstart="startResizePixel(event,${comp.id})"></div></div>`;
         el.innerHTML=`<div class="gate-body" style="padding:0;background:transparent;display:flex;align-items:center;justify-content:center;border-radius:0;width:100%;height:100%;">${bc}</div>`;
         el.addEventListener('mousedown',e=>{if(!e.target.classList.contains('pixel-delete-btn')&&!e.target.classList.contains('pixel-resize-handle')&&!e.target.classList.contains('port'))startDragGate(e,comp.id)});
         el.addEventListener('touchstart',e=>{if(!e.target.classList.contains('pixel-delete-btn')&&!e.target.classList.contains('pixel-resize-handle')&&!e.target.classList.contains('port'))startDragGate(e,comp.id)});
-        canvas.appendChild(el);markPortPositionsDirty();return;
+        canvas.appendChild(el);
+        registerComponentDom(comp,el);
+        return;
     }
     else{bc=`<div style="display:flex;justify-content:space-between;align-items:center;"><div style="display:flex;flex-direction:column;gap:4px;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><div class="port" id="port-${comp.id}-in-1" data-comp="${comp.id}" data-type="in" data-port="1"></div></div><span style="font-size:10px;font-weight:bold;">${comp.type}</span><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`}
     let hr=`<button class="delete-btn" onclick="removeComponent(${comp.id})">×</button>`;
@@ -922,7 +1035,22 @@ function renderComponent(comp){
     if(comp.type==='CLOCK'){const cInp=el.querySelector(`#clock-val-${comp.id}`);cInp.addEventListener('change',e=>{e.stopPropagation();let v=parseInt(cInp.value)||250;v=Math.max(TICK_MS,Math.min(TICK_MS*MAX_TICKS,v));comp.clockMs=Math.round(v);cInp.value=comp.clockMs;comp.clockCounter=0;forceSaveState()});cInp.addEventListener('mousedown',e=>e.stopPropagation())}
     if(comp.type==='COLOR'){const cInp=el.querySelector(`#color-val-${comp.id}`);cInp.addEventListener('input',e=>{e.stopPropagation();comp.pixelColor=e.target.value;updateVisuals();forceSaveState()});cInp.addEventListener('mousedown',e=>e.stopPropagation())}
     attachPortHandlers(el,'main');
-    canvas.appendChild(el);markPortPositionsDirty();
+    canvas.appendChild(el);
+    registerComponentDom(comp,el);
+}
+
+function registerComponentDom(comp,el){
+    compEls.set(comp.id,el);
+    const pc={in:[],out:[]};
+    const ports=el.querySelectorAll('.port');
+    for(let i=0;i<ports.length;i++){
+        const p=ports[i];
+        const t=p.getAttribute('data-type');
+        const pi=parseInt(p.getAttribute('data-port'));
+        if(!isNaN(pi)&&pc[t])pc[t][pi]=p;
+    }
+    compPortEls.set(comp.id,pc);
+    markPortPositionsDirty(comp.id);
 }
 
 /* shared port handlers */
@@ -984,7 +1112,7 @@ function attachPortHandlers(el,which){
                         const ds=getDragState();
                         if(isMain){
                             wires=wires.filter(w=>!(w.toComp===tc&&w.toPort===tp));
-                            wires.push({fromComp:ds.compId,fromPort:ds.portIndex,toComp:tc,toPort:tp});
+                            wires.push(newWire(ds.compId,ds.portIndex,tc,tp));
                             markPortPositionsDirty();runSimulation();drawWires();forceSaveState();
                         }else{
                             connectModalWire(ds.compId,ds.portIndex,tc,tp);
@@ -1019,13 +1147,18 @@ function attachPortHandlers(el,which){
                 else connectModalWire(ps.compId,ps.portIndex,cid,pidx);
                 return;
             }
-            if(isMain){
-                const sources=getOrderedSelectedSources();
-                if(sources.length>0){e.preventDefault();e.stopPropagation();wireFromSelectedSource(cid,pidx)}
-            }else{
-                const src=getNextModalSelectedSource();
-                if(src){e.preventDefault();e.stopPropagation();connectModalWire(src.id,0,cid,pidx)}
-            }
+            /* Bare click on an input port does nothing — prevents accidental
+           wiring when brushing a port. Shift+click wires from the next
+           selected source (round-robin). Pour mode is unaffected and
+           remains the preferred way to fan out from one output. */
+        if(!e.shiftKey)return;
+        if(isMain){
+            const sources=getOrderedSelectedSources();
+            if(sources.length>0){e.preventDefault();e.stopPropagation();wireFromSelectedSource(cid,pidx)}
+        }else{
+            const src=getNextModalSelectedSource();
+            if(src){e.preventDefault();e.stopPropagation();connectModalWire(src.id,0,cid,pidx)}
+        }
         };
         portEl.addEventListener('click',onClick);
         portEl.addEventListener('touchend',e=>{e.preventDefault();onClick(e)},{passive:false});
@@ -1053,6 +1186,69 @@ function ensureModalTempWire(){
     }
     return tw;
 }
+/* ─── wire identity & selection ────────────────────────────── */
+function newWire(fromComp,fromPort,toComp,toPort){
+    return {id:nextWireId++,fromComp,fromPort,toComp,toPort};
+}
+function adoptWireIds(){
+    let maxId=nextWireId-1;
+    for(const w of wires){
+        if(typeof w.id!=='number'||w.id<1)w.id=++maxId;
+        else if(w.id>maxId)maxId=w.id;
+    }
+    nextWireId=maxId+1;
+}
+function clearWireSelection(){
+    if(!selectedWireIds.size)return;
+    selectedWireIds.clear();
+    updateWireSelectionVisual();
+}
+function updateWireSelectionVisual(){
+    for(const [wid,p] of wirePaths.entries()){
+        const widNum=parseInt(wid.slice(5));
+        p.classList.toggle('selected',selectedWireIds.has(widNum));
+    }
+}
+function deleteWireById(wireId){
+    const i=wires.findIndex(w=>w.id===wireId);
+    if(i===-1)return;
+    wires.splice(i,1);
+    selectedWireIds.delete(wireId);
+    markPortPositionsDirty();runSimulation();drawWires();forceSaveState();
+    showToast('Wire deleted.','info',1000);
+}
+function deleteSelectedWires(){
+    if(!selectedWireIds.size)return;
+    const n=selectedWireIds.size;
+    wires=wires.filter(w=>!selectedWireIds.has(w.id));
+    selectedWireIds.clear();
+    markPortPositionsDirty();runSimulation();drawWires();forceSaveState();
+    showToast(`Deleted ${n} wire${n>1?'s':''}.`,'info',1200);
+}
+function onWireClick(e){
+    e.stopPropagation();
+    const wireId=parseInt(e.currentTarget.dataset.wireId);
+    if(isNaN(wireId))return;
+    if(e.shiftKey){
+        if(selectedWireIds.has(wireId))selectedWireIds.delete(wireId);
+        else selectedWireIds.add(wireId);
+    }else{
+        selectedWireIds.clear();
+        selectedWireIds.add(wireId);
+    }
+    updateWireSelectionVisual();
+}
+function onWireDblClick(e){
+    e.stopPropagation();
+    const wireId=parseInt(e.currentTarget.dataset.wireId);
+    if(!isNaN(wireId))deleteWireById(wireId);
+}
+function onWireContextMenu(e){
+    e.preventDefault();
+    e.stopPropagation();
+    const wireId=parseInt(e.currentTarget.dataset.wireId);
+    if(!isNaN(wireId))deleteWireById(wireId);
+}
 function updateModalTempWire(cx,cy){
     if(!modalDraggingWire)return;
     const fR=modalDraggingWire.el.getBoundingClientRect(),vR=document.getElementById('custom-gate-modal-viewport').getBoundingClientRect();
@@ -1069,7 +1265,21 @@ function startResizePixel(event,id){
     const comp=components.find(c=>c.id===id);if(!comp||comp.type!=='SCREEN')return;
     const sx=event.clientX||(event.touches&&event.touches[0].clientX),sy=event.clientY||(event.touches&&event.touches[0].clientY);
     const sw=comp.pixelWidth||40,sh=comp.pixelHeight||40;
-    const onMove=(cx,cy)=>{const dx=(cx-sx)/zoom,dy=(cy-sy)/zoom;const nw=Math.max(40,Math.round((sw+dx)/SNAP)*SNAP),nh=Math.max(40,Math.round((sh+dy)/SNAP)*SNAP);comp.pixelWidth=nw;comp.pixelHeight=nh;const el=document.getElementById(`comp-${id}`);if(el){el.style.width=nw+'px';el.style.height=nh+'px';el.style.minWidth=nw+'px';el.style.minHeight=nh+'px'}markPortPositionsDirty();drawWires()};
+    const onMove=(cx,cy)=>{
+        const dx=(cx-sx)/zoom,dy=(cy-sy)/zoom;
+        const nw=Math.max(40,Math.round((sw+dx)/SNAP)*SNAP),nh=Math.max(40,Math.round((sh+dy)/SNAP)*SNAP);
+        comp.pixelWidth=nw;comp.pixelHeight=nh;
+        const el=compEls.get(id);
+        if(el){
+            el.style.setProperty('width',nw+'px','important');
+            el.style.setProperty('height',nh+'px','important');
+            el.style.setProperty('min-width',nw+'px','important');
+            el.style.setProperty('min-height',nh+'px','important');
+            const wrap=el.querySelector('.pixel-wrapper');
+            if(wrap){wrap.style.width=nw+'px';wrap.style.height=nh+'px'}
+        }
+        markPortPositionsDirty(id);drawWires();
+    };
     const om=e=>onMove(e.clientX,e.clientY);
     const ot=e=>{if(e.touches.length===1)onMove(e.touches[0].clientX,e.touches[0].clientY)};
     const oe=()=>{window.removeEventListener('mousemove',om);window.removeEventListener('mouseup',oe);window.removeEventListener('touchmove',ot);window.removeEventListener('touchend',oe);forceSaveState()};
@@ -1111,21 +1321,49 @@ function moveDraggedGate(cx,cy){
     const mx=(cx-r.left-panX)/zoom,my=(cy-r.top-panY)/zoom;
     const nX=snapValue(mx-gateGrabOffsetX),nY=snapValue(my-gateGrabOffsetY);
     activeComp.x=nX;activeComp.y=nY;
-    const el=document.getElementById(`comp-${activeComp.id}`);if(el){el.style.left=nX+'px';el.style.top=nY+'px'}
-    if(groupDragStartPositions){const dx=nX-groupDragAnchorStartX,dy=nY-groupDragAnchorStartY;groupDragStartPositions.forEach((sp,sid)=>{if(sid===activeComp.id)return;const sc=components.find(c=>c.id===sid);if(!sc)return;sc.x=sp.x+dx;sc.y=sp.y+dy;const se=document.getElementById(`comp-${sid}`);if(se){se.style.left=sc.x+'px';se.style.top=sc.y+'px'}})}
-    markPortPositionsDirty();drawWires();
+    const el=compEls.get(activeComp.id);if(el){el.style.left=nX+'px';el.style.top=nY+'px'}
+    markPortPositionsDirty(activeComp.id);
+    if(groupDragStartPositions){
+        const dx=nX-groupDragAnchorStartX,dy=nY-groupDragAnchorStartY;
+        groupDragStartPositions.forEach((sp,sid)=>{
+            if(sid===activeComp.id)return;
+            const sc=components.find(c=>c.id===sid);if(!sc)return;
+            sc.x=sp.x+dx;sc.y=sp.y+dy;
+            const se=compEls.get(sid);
+            if(se){se.style.left=sc.x+'px';se.style.top=sc.y+'px'}
+            markPortPositionsDirty(sid);
+        });
+    }
+    drawWires();
 }
 window.addEventListener('mousemove',e=>{if(isDraggingGate)moveDraggedGate(e.clientX,e.clientY)});
 window.addEventListener('touchmove',e=>{if(!isDraggingGate||e.touches.length!==1)return;moveDraggedGate(e.touches[0].clientX,e.touches[0].clientY)},{passive:false});
-function finishGateDrag(){if(!isDraggingGate)return;if(activeComp){activeComp.x=snapValue(activeComp.x);activeComp.y=snapValue(activeComp.y);const el=document.getElementById(`comp-${activeComp.id}`);if(el){el.style.left=activeComp.x+'px';el.style.top=activeComp.y+'px'}}forceSaveState();markPortPositionsDirty();drawWires();isDraggingGate=false;activeComp=null;groupDragStartPositions=null}
+function finishGateDrag(){
+    if(!isDraggingGate)return;
+    if(activeComp){
+        activeComp.x=snapValue(activeComp.x);
+        activeComp.y=snapValue(activeComp.y);
+        const el=compEls.get(activeComp.id);
+        if(el){el.style.left=activeComp.x+'px';el.style.top=activeComp.y+'px'}
+        markPortPositionsDirty(activeComp.id);
+    }
+    forceSaveState();drawWires();
+    isDraggingGate=false;activeComp=null;groupDragStartPositions=null;
+}
 window.addEventListener('mouseup',finishGateDrag);
 window.addEventListener('touchend',finishGateDrag);
 
 /* remove / toggle */
 function removeComponent(id,skipSave){
     components=components.filter(c=>c.id!==id);
+    for(const w of wires){
+        if((w.fromComp===id||w.toComp===id)&&selectedWireIds.has(w.id))selectedWireIds.delete(w.id);
+    }
     wires=wires.filter(w=>w.fromComp!==id&&w.toComp!==id);
-    const el=document.getElementById(`comp-${id}`);if(el)el.remove();
+    const el=compEls.get(id);if(el)el.remove();
+    compEls.delete(id);
+    compPortEls.delete(id);
+    dirtyPortComponents.delete(id);
     selectedIds.delete(id);resetSelectionSourceIndex();markPortPositionsDirty();runSimulation();drawWires();
     if(!skipSave)forceSaveState();
 }
@@ -1189,17 +1427,12 @@ function evaluateCustomGate(comp){
     comp.outputsArray=outputs.map(oc=>oc.outputVal===1?1:0);
     comp.outputVal=comp.outputsArray[0]||0;
 }
-function tickClocksMain(comps){
-    comps.forEach(comp=>{
-        if(comp.type==='CLOCK'){
-            if(!Array.isArray(comp.inputs)||comp.inputs.length<1)comp.inputs=[0];
-            if(!(comp.inputs[0]?1:0)){comp.clockCounter=0;comp.state=0;comp.outputVal=0;return}
-            const p=clockTicksFor(comp);
-            comp.clockCounter=(comp.clockCounter||0)+1;
-            if(comp.clockCounter>=p){comp.clockCounter=0;comp.state=comp.state===1?0:1;comp.outputVal=comp.state}
-        }
-        else if(comp.isCustom&&comp.subComps)tickNestedClocksMain(comp);
-    });
+function tickSingleClock(comp){
+    if(!Array.isArray(comp.inputs)||comp.inputs.length<1)comp.inputs=[0];
+    if(!(comp.inputs[0]?1:0)){comp.clockCounter=0;comp.state=0;comp.outputVal=0;return}
+    const p=clockTicksFor(comp);
+    comp.clockCounter=(comp.clockCounter||0)+1;
+    if(comp.clockCounter>=p){comp.clockCounter=0;comp.state=comp.state===1?0:1;comp.outputVal=comp.state}
 }
 function tickNestedClocksMain(comp){
     if(!comp.clockStates)comp.clockStates={};
@@ -1243,8 +1476,99 @@ function runGenericSimulation(comps,wr,updateFn){
     }
     if(updateFn)updateFn();
 }
-function runSimulation(){runGenericSimulation(components,wires,updateVisuals)}
-function runModalSimulation(){runGenericSimulation(modalComponents,modalWires,updateModalVisuals)}
+/* ─── event-driven simulation ──────────────────────────────── */
+function runSimulationIncremental(comps,wr,seeds,updateFn){
+    if(!comps.length){if(updateFn)updateFn();return}
+    const byId=new Map();
+    for(const c of comps)byId.set(c.id,c);
+    const iwm=new Map();
+    for(const w of wr){
+        if(!byId.has(w.toComp)||!byId.has(w.fromComp))continue;
+        iwm.set(`${w.toComp}:${w.toPort}`,w);
+    }
+    /* consumers[`compId:portIdx`] = [{toComp,toPort}, …] */
+    const consumers=new Map();
+    for(const w of wr){
+        if(!byId.has(w.fromComp)||!byId.has(w.toComp))continue;
+        const key=`${w.fromComp}:${w.fromPort}`;
+        let list=consumers.get(key);
+        if(!list){list=[];consumers.set(key,list)}
+        list.push({toComp:w.toComp,toPort:w.toPort});
+    }
+    const queue=[];
+    const inQueue=new Set();
+    function enqueue(id){
+        if(!inQueue.has(id)&&byId.has(id)){inQueue.add(id);queue.push(id)}
+    }
+    for(const id of seeds){
+        const comp=byId.get(id);
+        if(!comp)continue;
+        if(comp.type==='CLOCK'||comp.type==='PULSE'||comp.type==='DELAY'){
+            /* This component's output was changed outside the simulation
+               (by tickSingleClock / tickPulseComponent / tickDelayComponent).
+               The sim won't detect a "change" for it, so enqueue its
+               consumers explicitly so downstream gates see the new value
+               this same tick. Also enqueue the component itself so its own
+               inputs get refreshed for the next tick's shift. */
+            const list0=consumers.get(`${comp.id}:0`);
+            if(list0)for(const c of list0)enqueue(c.toComp);
+        }
+        enqueue(id);
+    }
+
+    const maxIter=Math.min(4000,comps.length*3+100);
+    let iter=0;
+    while(queue.length>0&&iter<maxIter){
+        iter++;
+        const id=queue.shift();
+        inQueue.delete(id);
+        const comp=byId.get(id);
+        if(!comp)continue;
+        if(comp.type==='INPUT'||comp.type==='PUSH')continue;
+
+        const oldOut=comp.outputVal;
+        const oldOutputs=comp.outputsArray?comp.outputsArray.slice():null;
+        const ic=(comp.inputs||[]).length;
+        const ins=new Array(ic).fill(0);
+        for(let i=0;i<ic;i++){
+            const w=iwm.get(`${comp.id}:${i}`);
+            if(!w)continue;
+            const src=byId.get(w.fromComp);
+            if(!src)continue;
+            if(src.isCustom&&w.fromPort!==undefined)
+                ins[i]=src.outputsArray&&src.outputsArray[w.fromPort]!==undefined?src.outputsArray[w.fromPort]:0;
+            else ins[i]=src.outputVal||0;
+        }
+        comp.inputs=ins;
+        if(comp.type==='CLOCK'||comp.type==='PULSE')continue;
+        if(comp.isCustom)evaluateCustomGate(comp);
+        else comp.outputVal=evaluateGate(comp,ins);
+
+        let changed=oldOut!==comp.outputVal;
+        if(comp.outputsArray){
+            if(!oldOutputs||oldOutputs.length!==comp.outputsArray.length||
+               oldOutputs.some((v,i)=>v!==comp.outputsArray[i]))changed=true;
+            if(changed){
+                for(let pi=0;pi<comp.outputsArray.length;pi++){
+                    const list=consumers.get(`${comp.id}:${pi}`);
+                    if(list)for(const c of list)enqueue(c.toComp);
+                }
+            }
+        }else if(changed){
+            const list=consumers.get(`${comp.id}:0`);
+            if(list)for(const c of list)enqueue(c.toComp);
+        }
+    }
+    if(updateFn)updateFn();
+}
+function runSimulation(){
+    const seeds=components.map(c=>c.id);
+    runSimulationIncremental(components,wires,seeds,updateVisuals);
+}
+function runModalSimulation(){
+    const seeds=modalComponents.map(c=>c.id);
+    runSimulationIncremental(modalComponents,modalWires,seeds,updateModalVisuals);
+}
 
 function tickDelayComponent(comp){
     const q=ensureDelayQueue(comp);
@@ -1278,49 +1602,116 @@ function tickNestedTiming(container){
     });
 }
 function tickAll(){
-    components.forEach(comp=>{
-        if(comp.type==='DELAY')tickDelayComponent(comp);
-        else if(comp.type==='PULSE')tickPulseComponent(comp);
-        else if(comp.isCustom)tickNestedTiming(comp);
-    });
-    tickClocksMain(components);runSimulation();
+    const seeds=[];
+    for(let i=0;i<components.length;i++){
+        const comp=components[i];
+        if(comp.type==='DELAY'){
+            const old=comp.outputVal;
+            tickDelayComponent(comp);
+            if(old!==comp.outputVal)seeds.push(comp.id);
+        }else if(comp.type==='PULSE'){
+            const old=comp.outputVal;
+            tickPulseComponent(comp);
+            if(old!==comp.outputVal)seeds.push(comp.id);
+        }else if(comp.type==='CLOCK'){
+            const old=comp.outputVal;
+            tickSingleClock(comp);
+            if(old!==comp.outputVal)seeds.push(comp.id);
+        }else if(comp.isCustom){
+            tickNestedTiming(comp);
+            tickNestedClocksMain(comp);
+            /* nested state may have changed outputs; re-evaluate to be safe */
+            seeds.push(comp.id);
+        }
+    }
+    if(seeds.length)runSimulationIncremental(components,wires,seeds,updateVisuals);
+    else updateVisuals();
 }
 function tickModal(){
-    modalComponents.forEach(comp=>{
-        if(comp.type==='DELAY')tickDelayComponent(comp);
-        else if(comp.type==='PULSE')tickPulseComponent(comp);
-        else if(comp.isCustom)tickNestedTiming(comp);
-    });
-    tickClocksMain(modalComponents);runModalSimulation();
+    const seeds=[];
+    for(let i=0;i<modalComponents.length;i++){
+        const comp=modalComponents[i];
+        if(comp.type==='DELAY'){
+            const old=comp.outputVal;
+            tickDelayComponent(comp);
+            if(old!==comp.outputVal)seeds.push(comp.id);
+        }else if(comp.type==='PULSE'){
+            const old=comp.outputVal;
+            tickPulseComponent(comp);
+            if(old!==comp.outputVal)seeds.push(comp.id);
+        }else if(comp.type==='CLOCK'){
+            const old=comp.outputVal;
+            tickSingleClock(comp);
+            if(old!==comp.outputVal)seeds.push(comp.id);
+        }else if(comp.isCustom){
+            tickNestedTiming(comp);
+            tickNestedClocksMain(comp);
+            seeds.push(comp.id);
+        }
+    }
+    if(seeds.length)runSimulationIncremental(modalComponents,modalWires,seeds,updateModalVisuals);
+    else updateModalVisuals();
 }
 setInterval(()=>{if(!isPaused)tickAll();if(isModalOpen())tickModal()},TICK_MS);
 function stepSimulation(){tickAll();forceSaveState()}
 
 /* visuals */
 function updateVisuals(){
+    /* build O(1) id → comp map so wire lookups below aren't O(N²) */
+    const byId=new Map();
+    for(let i=0;i<components.length;i++)byId.set(components[i].id,components[i]);
+
     for(let i=0;i<components.length;i++){
-        const comp=components[i];const el=document.getElementById(`comp-${comp.id}`);if(!el)continue;
+        const comp=components[i];
+        const el=compEls.get(comp.id);if(!el)continue;
+        const pc=compPortEls.get(comp.id);
         let pw=comp.outputVal===1;
         if(comp.isCustom&&comp.outputsArray&&comp.outputsArray.length)pw=comp.outputsArray.some(v=>v===1);
         el.classList.toggle('powered',pw);
-        if(comp.type==='OUTPUT'){const b=document.getElementById(`bulb-${comp.id}`);if(b)b.classList.toggle('on',comp.outputVal===1)}
-        if(comp.type==='PULSE'){const l=document.getElementById(`pulse-led-${comp.id}`);if(l)l.classList.toggle('on',comp.state===1)}
+        if(comp.type==='OUTPUT'){
+            const b=el.querySelector('.bulb');
+            if(b)b.classList.toggle('on',comp.outputVal===1);
+        }
         if(comp.type==='SCREEN'){
-            const p=document.getElementById(`pixel-${comp.id}`);
+            const p=el.querySelector('.pixel-square');
             if(p){
-                const v=(comp.inputs&&comp.inputs[0])?1:0;p.classList.toggle('on',v===1);
-                let cc=null;const iw=wires.find(w=>w.toComp===comp.id&&w.toPort===0);
-                if(iw){const s=components.find(c=>c.id===iw.fromComp);if(s&&s.type==='COLOR')cc=s.pixelColor||'#39ff14'}
+                const v=(comp.inputs&&comp.inputs[0])?1:0;
+                p.classList.toggle('on',v===1);
+                let cc=null;
+                const iw=wires.find(w=>w.toComp===comp.id&&w.toPort===0);
+                if(iw){const s=byId.get(iw.fromComp);if(s&&s.type==='COLOR')cc=s.pixelColor||'#39ff14'}
                 if(v===1&&cc){p.style.background=cc;p.style.boxShadow=`0 0 15px ${cc}`}else{p.style.background='';p.style.boxShadow=''}
             }
         }
-        (comp.inputs||[]).forEach((v,idx)=>{const p=document.getElementById(`port-${comp.id}-in-${idx}`);if(p)p.classList.toggle('active-port',v===1)});
-        if(comp.isCustom&&comp.outputsArray)comp.outputsArray.forEach((v,idx)=>{const p=document.getElementById(`port-${comp.id}-out-${idx}`);if(p)p.classList.toggle('active-port',v===1)});
-        else if(comp.type!=='SCREEN'){const p=document.getElementById(`port-${comp.id}-out-0`);if(p)p.classList.toggle('active-port',comp.outputVal===1)}
+        if(pc){
+            const ins=comp.inputs||[];
+            for(let j=0;j<ins.length;j++){
+                const p=pc.in[j];
+                if(p)p.classList.toggle('active-port',ins[j]===1);
+            }
+            if(comp.isCustom&&comp.outputsArray){
+                for(let j=0;j<comp.outputsArray.length;j++){
+                    const p=pc.out[j];
+                    if(p)p.classList.toggle('active-port',comp.outputsArray[j]===1);
+                }
+            }else if(comp.type!=='SCREEN'){
+                const p=pc.out[0];
+                if(p)p.classList.toggle('active-port',comp.outputVal===1);
+            }
+        }
     }
     for(let i=0;i<wires.length;i++){
-        const w=wires[i];const p=document.getElementById(`wire-${i}`);
-        if(p){const s=components.find(c=>c.id===w.fromComp);if(s){let pw=false;if(s.isCustom&&w.fromPort!==undefined)pw=s.outputsArray[w.fromPort]===1;else pw=s.outputVal===1;p.classList.toggle('powered',pw)}}
+        const w=wires[i];
+        const p=document.getElementById(`wire-${w.id}`);
+        if(p){
+            const s=byId.get(w.fromComp);
+            if(s){
+                let pw=false;
+                if(s.isCustom&&w.fromPort!==undefined)pw=s.outputsArray&&s.outputsArray[w.fromPort]===1;
+                else pw=s.outputVal===1;
+                p.classList.toggle('powered',pw);
+            }
+        }
     }
 }
 function updateModalVisuals(){
@@ -1359,19 +1750,27 @@ function drawWires(){
         if(!tw){tw=document.createElementNS('http://www.w3.org/2000/svg','path');tw.setAttribute('id','temp-wire');tw.setAttribute('d','');tw.setAttribute('stroke','#e83e8c');tw.setAttribute('stroke-width','3');tw.setAttribute('stroke-dasharray','5,5');tw.setAttribute('fill','none');tw.setAttribute('visibility','hidden');svgWires.appendChild(tw)}
         const seen=new Set();
         for(let i=0;i<wires.length;i++){
-            const w=wires[i];const wid=`wire-${i}`;seen.add(wid);
+            const w=wires[i];const wid=`wire-${w.id}`;seen.add(wid);
             const fp=portPositions[`${w.fromComp}-out-${w.fromPort}`],tp=portPositions[`${w.toComp}-in-${w.toPort}`];
             if(fp&&tp){
                 const dx=Math.abs(tp.x-fp.x)*.5;
                 const d=`M ${fp.x} ${fp.y} C ${fp.x+dx} ${fp.y}, ${tp.x-dx} ${tp.y}, ${tp.x} ${tp.y}`;
                 let p=wirePaths.get(wid);
                 if(!p){
-                    p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('id',wid);p.setAttribute('class','wire-path');p.setAttribute('stroke-width','3.5');p.setAttribute('stroke-linecap','round');
-                    p.onclick=function(e){e.stopPropagation();const idx=parseInt((e.target.id||this.id).split('-')[1]);if(!isNaN(idx)&&idx>=0&&idx<wires.length){wires.splice(idx,1);markPortPositionsDirty();runSimulation();drawWires();forceSaveState();showToast('Wire deleted.','info',1200)}};
-                    p.onmousedown=e=>e.stopPropagation();
+                    p=document.createElementNS('http://www.w3.org/2000/svg','path');
+                    p.setAttribute('id',wid);
+                    p.setAttribute('class','wire-path');
+                    p.setAttribute('stroke-width','3.5');
+                    p.setAttribute('stroke-linecap','round');
+                    p.dataset.wireId=w.id;
+                    p.addEventListener('click',onWireClick);
+                    p.addEventListener('dblclick',onWireDblClick);
+                    p.addEventListener('contextmenu',onWireContextMenu);
+                    p.addEventListener('mousedown',e=>e.stopPropagation());
                     svgWires.insertBefore(p,tw);wirePaths.set(wid,p);
                 }
                 p.setAttribute('d',d);
+                p.classList.toggle('selected',selectedWireIds.has(w.id));
             }else{const p=wirePaths.get(wid);if(p){p.remove();wirePaths.delete(wid)}}
         }
         for(const [wid,p] of wirePaths.entries())if(!seen.has(wid)){p.remove();wirePaths.delete(wid)}
@@ -1386,12 +1785,15 @@ function drawModalWires(){
         if(fp&&tp){
             const dx=Math.abs(tp.x-fp.x)*.5;
             const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+            p.setAttribute('class','wire-path'+(modalSelectedWireIds.has(w.id)?' selected':''));
             p.setAttribute('d',`M ${fp.x} ${fp.y} C ${fp.x+dx} ${fp.y}, ${tp.x-dx} ${tp.y}, ${tp.x} ${tp.y}`);
-            p.setAttribute('stroke','#666');p.setAttribute('stroke-width','3.5');p.setAttribute('fill','none');p.setAttribute('stroke-linecap','round');
-            p.style.cursor='pointer';p.style.pointerEvents='stroke';
-            p.addEventListener('click',e=>{e.stopPropagation();const i=modalWires.indexOf(w);if(i!==-1){modalWires.splice(i,1);markModalPortPositionsDirty();drawModalWires();runModalSimulation()}});
-            p.addEventListener('mouseover',function(){this.setAttribute('stroke','#dc3545')});
-            p.addEventListener('mouseout',function(){this.setAttribute('stroke','#666')});
+            p.setAttribute('stroke-width','3.5');
+            p.setAttribute('stroke-linecap','round');
+            p.dataset.wireId=w.id;
+            p.addEventListener('click',onModalWireClick);
+            p.addEventListener('dblclick',onModalWireDblClick);
+            p.addEventListener('contextmenu',onModalWireContextMenu);
+            p.addEventListener('mousedown',e=>e.stopPropagation());
             svg.appendChild(p);
         }
     }
@@ -1617,8 +2019,11 @@ function refreshAllInstances(gateName,newDef){
         if(instance.delayStates){const nds={};for(const sc of newSubComps)if(sc.type==='DELAY'){const v=delayTicksFor(sc);const old=oldStateMap.get(sc.id);const q=(old&&old.delayQueueRaw&&old.delayQueueRaw.length===v)?old.delayQueueRaw.slice():new Array(v).fill(0);nds[sc.id]={queue:q,ptr:0}}instance.delayStates=nds}
         if(instance.clockStates){const ncs={};for(const sc of newSubComps)if(sc.type==='CLOCK'){const old=oldStateMap.get(sc.id);ncs[sc.id]={counter:(old&&old.clockCounter)||0,state:(old&&old.state)||0,period:clockTicksFor(sc)}}instance.clockStates=ncs}
         if(instance.outputsArray)instance.outputsArray=new Array(freshDef.outputsCount||0).fill(0);
-        const el=document.getElementById(`comp-${instance.id}`);
-        if(el){el.remove();renderComponent(instance);const ne=document.getElementById(`comp-${instance.id}`);if(ne){ne.classList.add('gate-updating');setTimeout(()=>ne.classList.remove('gate-updating'),600)}}}
+        const el=compEls.get(instance.id);
+        if(el){el.remove();compEls.delete(instance.id);compPortEls.delete(instance.id)}
+        renderComponent(instance);
+        const ne=compEls.get(instance.id);
+        if(ne){ne.classList.add('gate-updating');setTimeout(()=>ne.classList.remove('gate-updating'),600)}}
     for(const c of components)traverseAndRefresh(c);
     return updatedCount;
 }
@@ -1713,7 +2118,7 @@ function mergeImportedState(state){
         initComponentInputs(cl);
         return cl;
     });
-    const nw=(state.wires||[]).map(w=>({fromComp:idMap[w.fromComp],fromPort:w.fromPort,toComp:idMap[w.toComp],toPort:w.toPort})).filter(w=>w.fromComp!==undefined&&w.toComp!==undefined);
+    const nw=(state.wires||[]).filter(w=>idMap[w.fromComp]!==undefined&&idMap[w.toComp]!==undefined).map(w=>newWire(idMap[w.fromComp],w.fromPort,idMap[w.toComp],w.toPort));
     components.push(...nc);wires.push(...nw);nc.forEach(c=>renderComponent(c));
     updateCustomGatesToolbar();markPortPositionsDirty();runSimulation();drawWires();forceSaveState();
 }
@@ -1786,6 +2191,7 @@ function loadFromLocalStorage(){
         if(!raw)return false;
         const state=JSON.parse(raw);
         components=state.components||[];wires=state.wires||[];customContainers=state.customContainers||[];savedCustomGates=state.savedCustomGates||{};
+        adoptWireIds();
         savedFolders=state.savedFolders||{};
         nextId=state.nextId||1;panX=state.panX||0;panY=state.panY||0;zoom=state.zoom||1;
         if(state.isDark){document.body.classList.remove('light-theme');document.body.classList.add('dark-theme')}
@@ -1853,11 +2259,14 @@ async function clearAll(){
     const ok=await showConfirm('Clear Everything','Are you sure you want to clear everything?');
     if(!ok)return;
     components=[];wires=[];customContainers=[];savedCustomGates={};savedFolders={};
-    selectedIds.clear();resetSelectionSourceIndex();
+    selectedIds.clear();selectedWireIds.clear();resetSelectionSourceIndex();
     if(wirePouringState)exitWirePouring();
     closeGateFolderDropdown();closeFolderContextMenu();
     canvas.innerHTML='<div id="grid-bg" onmousedown="startPan(event)" ontouchstart="startTouchPanZoom(event)"></div><svg id="wires"><path id="temp-wire" d="" stroke="#e83e8c" stroke-width="3" stroke-dasharray="5,5" fill="none" visibility="hidden" /></svg>';
-    svgWires=document.getElementById('wires');updateCustomGatesToolbar();resetWiring();markPortPositionsDirty();drawWires();
+    svgWires=document.getElementById('wires');
+    compEls.clear();compPortEls.clear();dirtyPortComponents.clear();portPositionsDirty=true;portPositions={};
+    wirePaths.clear();
+    updateCustomGatesToolbar();resetWiring();markPortPositionsDirty();drawWires();
     localStorage.removeItem('logic_sim_save_state_v4');forceSaveState();showToast('All cleared.','info');
 }
 setInterval(saveToLocalStorage,10000);
@@ -1980,7 +2389,8 @@ function closeCustomGateModalOutside(e){if(e.target.id==='custom-gate-modal')clo
 
 function initModalSimulator(){setupModalToolbar();setupModalEventListeners()}
 function resetModalState(){
-    modalComponents=[];modalWires=[];modalNextId=1;
+    modalComponents=[];modalWires=[];modalNextId=1;modalNextWireId=1;
+    modalSelectedWireIds.clear();
     modalPanX=0;modalPanY=0;modalZoom=1;modalIsPanning=false;
     modalStartPanX=0;modalStartPanY=0;modalInitialPinchDistance=null;modalInitialZoom=1;
     modalGhostType=null;modalDraggingWire=null;
@@ -2026,6 +2436,7 @@ function setupModalEventListeners(){
         if(e.target.closest('.gate')||e.target.closest('.port'))return;
         if(e.shiftKey){startModalBoxSelect(e);e.preventDefault();return}
         if(modalSelectedIds.size)clearModalSelection();
+        if(modalSelectedWireIds.size)clearModalWireSelection();
         modalIsPanning=true;modalStartPanX=e.clientX-modalPanX;modalStartPanY=e.clientY-modalPanY;e.preventDefault();
     });
     vp.addEventListener('wheel',handleModalZoom,{passive:false});
@@ -2112,7 +2523,7 @@ function pasteModalAtCursor(){
         if(cl.isCustom){const dn=cl._defName||cl.type;if(savedCustomGates[dn]){cl.def=savedCustomGates[dn];cl.type=dn}}
         initComponentInputs(cl);nc.push(cl);
     }
-    const nw=modalClipboard.wires.map(w=>({fromComp:idMap[w.fromComp],fromPort:w.fromPort,toComp:idMap[w.toComp],toPort:w.toPort})).filter(w=>w.fromComp!==undefined&&w.toComp!==undefined);
+    const nw=modalClipboard.wires.filter(w=>idMap[w.fromComp]!==undefined&&idMap[w.toComp]!==undefined).map(w=>newModalWire(idMap[w.fromComp],w.fromPort,idMap[w.toComp],w.toPort));
     modalComponents.push(...nc);modalWires.push(...nw);
     nc.forEach(c=>renderModalComponent(c));
     clearModalSelection();
@@ -2324,10 +2735,65 @@ function renderModalComponent(comp){
 function connectModalWire(fc,fp,tc,tp){
     if(modalWires.some(w=>w.fromComp===fc&&w.fromPort===fp&&w.toComp===tc&&w.toPort===tp)){showToast('Wire already exists.','info',800);return}
     modalWires=modalWires.filter(w=>!(w.toComp===tc&&w.toPort===tp));
-    modalWires.push({fromComp:fc,fromPort:fp,toComp:tc,toPort:tp});
+    modalWires.push(newModalWire(fc,fp,tc,tp));
     markModalPortPositionsDirty();drawModalWires();runModalSimulation();
     const ie=document.querySelector(`#custom-gate-modal-canvas .port[data-comp="${tc}"][data-type="in"][data-port="${tp}"]`);
     if(ie){ie.style.transition='box-shadow .15s';ie.style.boxShadow='0 0 20px #28a745';setTimeout(()=>{ie.style.boxShadow=''},300)}
+}
+function newModalWire(fromComp,fromPort,toComp,toPort){
+    return {id:modalNextWireId++,fromComp,fromPort,toComp,toPort};
+}
+function adoptModalWireIds(){
+    let maxId=modalNextWireId-1;
+    for(const w of modalWires){
+        if(typeof w.id!=='number'||w.id<1)w.id=++maxId;
+        else if(w.id>maxId)maxId=w.id;
+    }
+    modalNextWireId=maxId+1;
+}
+function clearModalWireSelection(){
+    if(!modalSelectedWireIds.size)return;
+    modalSelectedWireIds.clear();
+    drawModalWires();
+}
+function deleteModalWireById(wireId){
+    const i=modalWires.findIndex(w=>w.id===wireId);
+    if(i===-1)return;
+    modalWires.splice(i,1);
+    modalSelectedWireIds.delete(wireId);
+    markModalPortPositionsDirty();drawModalWires();runModalSimulation();
+}
+function deleteSelectedModalWires(){
+    if(!modalSelectedWireIds.size)return;
+    const n=modalSelectedWireIds.size;
+    modalWires=modalWires.filter(w=>!modalSelectedWireIds.has(w.id));
+    modalSelectedWireIds.clear();
+    markModalPortPositionsDirty();drawModalWires();runModalSimulation();
+    showToast(`Deleted ${n} wire${n>1?'s':''}.`,'info',1200);
+}
+function onModalWireClick(e){
+    e.stopPropagation();
+    const wireId=parseInt(e.currentTarget.dataset.wireId);
+    if(isNaN(wireId))return;
+    if(e.shiftKey){
+        if(modalSelectedWireIds.has(wireId))modalSelectedWireIds.delete(wireId);
+        else modalSelectedWireIds.add(wireId);
+    }else{
+        modalSelectedWireIds.clear();
+        modalSelectedWireIds.add(wireId);
+    }
+    drawModalWires();
+}
+function onModalWireDblClick(e){
+    e.stopPropagation();
+    const wireId=parseInt(e.currentTarget.dataset.wireId);
+    if(!isNaN(wireId))deleteModalWireById(wireId);
+}
+function onModalWireContextMenu(e){
+    e.preventDefault();
+    e.stopPropagation();
+    const wireId=parseInt(e.currentTarget.dataset.wireId);
+    if(!isNaN(wireId))deleteModalWireById(wireId);
 }
 function exitModalWirePouring(){
     if(modalWirePouringState){const el=modalWirePouringState.el;if(el)el.classList.remove('pour-selected');modalWirePouringState=null}
@@ -2378,6 +2844,9 @@ function moveModalDraggedGate(cx,cy){
 function finishModalGateDrag(){if(!isDraggingModalGate)return;isDraggingModalGate=false;activeModalComp=null;modalGroupDragStartPositions=null;markModalPortPositionsDirty();drawModalWires()}
 function removeModalComponent(id){
     modalComponents=modalComponents.filter(c=>c.id!==id);
+    for(const w of modalWires){
+        if((w.fromComp===id||w.toComp===id)&&modalSelectedWireIds.has(w.id))modalSelectedWireIds.delete(w.id);
+    }
     modalWires=modalWires.filter(w=>w.fromComp!==id&&w.toComp!==id);
     const el=document.getElementById(`modal-comp-${id}`);if(el)el.remove();
     modalSelectedIds.delete(id);modalSelectedSourceIndex=0;
@@ -2449,7 +2918,7 @@ function loadDefIntoModal(def, gateKey){
         const from = idMap[w.fromComp];
         const to   = idMap[w.toComp];
         if(from !== undefined && to !== undefined){
-            modalWires.push({fromComp: from, fromPort: w.fromPort, toComp: to, toPort: w.toPort});
+            modalWires.push(newModalWire(from, w.fromPort, to, w.toPort));
         }
     });
     markModalPortPositionsDirty();
@@ -2468,7 +2937,7 @@ function loadSelectionIntoModal(){
     });
     const selSet=new Set(selComps.map(c=>c.id));
     wires.forEach(w=>{
-        if(selSet.has(w.fromComp)&&selSet.has(w.toComp))modalWires.push({fromComp:idMap[w.fromComp],fromPort:w.fromPort,toComp:idMap[w.toComp],toPort:w.toPort});
+        if(selSet.has(w.fromComp)&&selSet.has(w.toComp))modalWires.push(newModalWire(idMap[w.fromComp],w.fromPort,idMap[w.toComp],w.toPort));
     });
     markModalPortPositionsDirty();
     requestAnimationFrame(()=>{drawModalWires();runModalSimulation()});
@@ -2510,7 +2979,7 @@ function buildGateFromModal(gateName,gateColor,gateFolder){
         innerInputs:innerInputs.map(c=>c.id),
         innerOutputs:innerOutputs.map(c=>c.id),
         innerComps:storedInnerComps,
-        innerWires:innerWires.map(w=>({...w}))
+        innerWires:innerWires.map(w=>({fromComp:w.fromComp,fromPort:w.fromPort,toComp:w.toComp,toPort:w.toPort}))
     };
     if(newDef.folder&&!savedFolders[newDef.folder])savedFolders[newDef.folder]={name:newDef.folder,color:'#475569'};
     if(customGateModalIsEditing&&customGateModalEditingType){
@@ -2586,6 +3055,8 @@ window.addEventListener('load',()=>{
     svgWires=document.getElementById('wires');
     components.forEach(comp=>renderComponent(comp));
     markPortPositionsDirty();drawWires();runSimulation();
+    /* Seed history with the loaded state so the first edit is undoable. */
+    undoStack.push(_snap());
     updateUndoRedoButtons();resetSelectionSourceIndex();
     if(localStorage.getItem('instructions_hidden')==='true'){const b=document.getElementById('instructions-box');if(b)b.classList.add('hidden')}
     console.log('✅ Logic Sim loaded.');

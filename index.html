@@ -17,7 +17,7 @@ button:hover,.tool-btn:hover{background:#0056b3}
 .toolbar-group{display:flex;gap:3px;align-items:center;border-left:2px solid var(--border-color);padding-left:5px;flex-shrink:0}
 .toolbar-group:first-child{border-left:none;padding-left:0}
 #viewport{position:absolute;top:62px;left:0;right:0;bottom:0;overflow:hidden;cursor:grab;touch-action:none;transform:translateZ(0);
-    background-image:radial-gradient(var(--dot-color) 1px,transparent 1px);
+    background-image:radial-gradient(var(--dot-color) var(--dot-radius,1px),transparent var(--dot-radius,1px));
     background-size:20px 20px;
     background-position:0 0;
     background-repeat:repeat}
@@ -125,7 +125,7 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
 #custom-gate-modal .cg-sim-row{display:flex;gap:8px;flex:1;min-height:0}
 #custom-gate-modal #custom-gate-modal-toolbar{width:100px;flex-shrink:0;overflow-y:auto;overflow-x:hidden;background:var(--bg-color);border:1px solid var(--border-color);border-radius:6px;padding:6px;display:flex;flex-direction:column;gap:4px}
 #custom-gate-modal #custom-gate-modal-toolbar .tool-btn{font-size:10px;padding:3px 5px;width:100%;justify-content:center}
-#custom-gate-modal #custom-gate-modal-viewport{flex:1;position:relative;overflow:hidden;border:1px solid var(--border-color);border-radius:6px;background-color:var(--bg-color);background-image:radial-gradient(var(--dot-color) 1px,transparent 1px);background-size:20px 20px;background-position:0 0;background-repeat:repeat;min-width:0;cursor:grab;touch-action:none}
+#custom-gate-modal #custom-gate-modal-viewport{flex:1;position:relative;overflow:hidden;border:1px solid var(--border-color);border-radius:6px;background-color:var(--bg-color);background-image:radial-gradient(var(--dot-color) var(--dot-radius,1px),transparent var(--dot-radius,1px));background-size:20px 20px;background-position:0 0;background-repeat:repeat;min-width:0;cursor:grab;touch-action:none}
 #custom-gate-modal #custom-gate-modal-viewport:active{cursor:grabbing}
 #custom-gate-modal #custom-gate-modal-canvas{position:absolute;top:0;left:0;width:100%;height:100%;transform-origin:0 0;will-change:transform}
 #custom-gate-modal #custom-gate-modal-grid-bg{display:none!important}
@@ -168,6 +168,22 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
 .fcm-item{padding:7px 10px;border-radius:4px;cursor:pointer;font-size:11px;white-space:nowrap;color:var(--text-color)}
 .fcm-item:hover{background:rgba(127,127,127,.18)}
 .fcm-item.fcm-danger{color:#ef4444}
+
+/* ══════════════════════════════════════════════════════════════
+   DEBUG MODE
+   ══════════════════════════════════════════════════════════════ */
+body.debug-mode .port.debug-unconnected{border-color:#ef4444!important;animation:dbgPulse 1.4s ease-in-out infinite}
+body.debug-mode .gate.debug-broken{outline:2px dashed #ef4444;outline-offset:2px}
+body.debug-mode .pixel-square .port{opacity:.72}
+@keyframes dbgPulse{0%,100%{border-color:#ef4444}50%{border-color:#fca5a5}}
+#debug-tooltip{position:fixed;z-index:99999;background:rgba(17,24,39,.96);color:#f9fafb;border:1px solid #374151;border-radius:6px;padding:7px 9px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;line-height:1.45;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.45);max-width:280px;display:none}
+#debug-tooltip.visible{display:block}
+#debug-tooltip .dbg-title{font-weight:bold;color:#fbbf24;margin-bottom:3px;font-size:11px;letter-spacing:.03em}
+#debug-tooltip .dbg-line{color:#e5e7eb;white-space:nowrap}
+#debug-tooltip .dbg-line.dbg-hi{color:#39ff14}
+#debug-tooltip .dbg-line.dbg-lo{color:#9ca3af}
+#debug-tooltip .dbg-err{color:#f87171;font-weight:bold;white-space:nowrap}
+#debug-tooltip .dbg-pin-hint{color:#6b7280;font-size:9px;margin-top:5px;font-style:italic;border-top:1px solid #374151;padding-top:4px}
 </style>
 </head>
 <body>
@@ -206,6 +222,7 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
         <button onclick="resetView()" style="background:#4b5563;">Reset</button>
         <button onclick="toggleTheme()" style="background:#6366f1;">Theme</button>
         <button onclick="clearAll()" style="background:#dc3545;">Clear</button>
+        <button id="debug-btn" onclick="toggleDebugMode()" style="background:#7c3aed;" title="Toggle Debug Mode (D)">🐞 Debug</button>
         <button onclick="toggleInstructions()" style="background:#8b5cf6;">Tips</button>
         <button id="toast-btn" onclick="toggleToasts()" style="background:#8b5cf6;" title="Toggle notifications">🔔</button>
     </div>
@@ -310,7 +327,8 @@ svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:all;ove
     • <strong>Shift+click an input port</strong> to wire from the next selected source (round-robin).<br />
     • <strong>Click a wire</strong> to select (yellow) • <strong>double-click</strong> or <strong>right-click</strong> a wire to delete it.<br />
     • <strong>Ctrl+C / Ctrl+V</strong> to copy &amp; paste selected gates.<br />
-    • <strong>Undo/Redo</strong>: Ctrl+Z / Ctrl+Shift+Z.
+    • <strong>Undo/Redo</strong>: Ctrl+Z / Ctrl+Shift+Z.<br />
+    • <strong>Debug mode</strong>: press <strong>D</strong>. Hover gates/wires to inspect; click a gate body or wire to pin; <strong>Esc</strong> to unpin.
 </div>
 
 <script>
@@ -333,6 +351,14 @@ const compEls=new Map();            /* comp.id → root .gate element */
 const compPortEls=new Map();        /* comp.id → {in:[], out:[]} */
 const dirtyPortComponents=new Set();/* comp ids whose port screen-positions changed */
 let openFolderName=null;
+
+/* debug mode — purely observational, never affects simulation or saved state */
+let debugMode=false;
+let debugPinned=null;        /* null | {kind:'gate'|'wire', id, x, y} */
+let debugTooltipEl=null;
+let debugLastHtml='';
+let debugMouseX=0, debugMouseY=0;
+let debugRafPending=false;
 
 const viewport=document.getElementById('viewport');
 const canvas=document.getElementById('canvas');
@@ -626,22 +652,38 @@ function updatePortPositions(){
    ═══════════════════════════════════════════════════════════════ */
 const GRID_UNIT=20;
 const GRID_MIN_PX=10;
+/* Dot scale: faint + tiny at low zoom, clearer + larger at high zoom.
+   t maps log2(zoom) so zoom≈0.1 → 0 and zoom≈5 → 1. Alpha and radius
+   both interpolate across t so dots read as a soft texture when zoomed
+   out and as distinct markers when zoomed in. */
+function applyDotStyle(el,z){
+    const isDark=document.body.classList.contains('dark-theme');
+    const t=Math.max(0,Math.min(1,(Math.log2(z)+3.32)/5.32));
+    const alpha=0.06+t*0.40;
+    const radius=(0.7+t*1.3).toFixed(2);
+    const rgb=isDark?'255,255,255':'100,110,130';
+    el.style.setProperty('--dot-color',`rgba(${rgb},${alpha.toFixed(3)})`);
+    el.style.setProperty('--dot-radius',radius+'px');
+}
 function updateGridBackground(){
     const gs=Math.max(GRID_MIN_PX,GRID_UNIT*zoom);
-    const half=gs/2;
-    const bx=(((panX-half)%gs)+gs)%gs;
-    const by=(((panY-half)%gs)+gs)%gs;
+    /* Align the first dot with the first snap point (k*SNAP in canvas
+       coords → panX % gs on screen). The old code subtracted gs/2 which
+       offset the whole pattern half a tile. */
+    const bx=((panX%gs)+gs)%gs;
+    const by=((panY%gs)+gs)%gs;
     viewport.style.backgroundSize=gs+'px '+gs+'px';
     viewport.style.backgroundPosition=bx+'px '+by+'px';
+    applyDotStyle(viewport,zoom);
 }
 function updateModalGridBackground(){
     const vp=document.getElementById('custom-gate-modal-viewport');if(!vp)return;
     const gs=Math.max(GRID_MIN_PX,GRID_UNIT*modalZoom);
-    const half=gs/2;
-    const bx=(((modalPanX-half)%gs)+gs)%gs;
-    const by=(((modalPanY-half)%gs)+gs)%gs;
+    const bx=((modalPanX%gs)+gs)%gs;
+    const by=((modalPanY%gs)+gs)%gs;
     vp.style.backgroundSize=gs+'px '+gs+'px';
     vp.style.backgroundPosition=bx+'px '+by+'px';
+    applyDotStyle(vp,modalZoom);
 }
 
 /* transform */
@@ -651,7 +693,7 @@ function startPan(e){if(e.target.closest('.gate')||e.target.closest('.custom-con
 function startTouchPanZoom(e){if(e.target.closest('.gate')||e.target.closest('.custom-container-wrapper')||e.target.closest('#toolbar'))return;if(e.touches.length===2){initialPinchDistance=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);initialZoom=zoom;isPanning=false}else if(e.touches.length===1){isPanning=true;startPanX=e.touches[0].clientX-panX;startPanY=e.touches[0].clientY-panY}e.stopPropagation()}
 function handleZoom(e){e.preventDefault();const zf=1.1;applyZoom(e.deltaY<0?zoom*zf:zoom/zf,e.clientX,e.clientY)}
 function resetView(){panX=0;panY=0;zoom=1;updateTransform();markPortPositionsDirty();saveToLocalStorage()}
-function toggleTheme(){document.body.classList.toggle('light-theme');document.body.classList.toggle('dark-theme');saveToLocalStorage()}
+function toggleTheme(){document.body.classList.toggle('light-theme');document.body.classList.toggle('dark-theme');updateGridBackground();updateModalGridBackground();saveToLocalStorage()}
 function togglePause(){isPaused=!isPaused;const b=document.getElementById('pause-btn');b.innerText=isPaused?'Resume':'Pause';b.style.background=isPaused?'#16a34a':'#d97706'}
 
 /* box select */
@@ -797,6 +839,16 @@ function handleMove(cx,cy){
 window.addEventListener('mouseup',e=>{if(isBoxSelecting)finishBoxSelect(e.clientX,e.clientY);handleEnd(e.clientX,e.clientY)});
 window.addEventListener('touchend',e=>{initialPinchDistance=null;if(e.changedTouches.length)handleEnd(e.changedTouches[0].clientX,e.changedTouches[0].clientY)});
 
+/* Debug hover — throttled to one update per animation frame. Does nothing
+   when debug is off or a tooltip is pinned. */
+window.addEventListener('mousemove',e=>{
+    if(!debugMode||debugPinned)return;
+    debugMouseX=e.clientX;debugMouseY=e.clientY;
+    if(debugRafPending)return;
+    debugRafPending=true;
+    requestAnimationFrame(()=>{debugRafPending=false;updateDebugHover();});
+});
+
 function handleEnd(cx,cy){
     if(isPanning)saveToLocalStorage();isPanning=false;
     if(ghostType){
@@ -878,6 +930,7 @@ function removeWireFromPort(cid,pt,pidx){
 document.addEventListener('keydown',e=>{
     const mOpen=document.getElementById('custom-gate-modal').style.display==='flex';
     if(e.key==='Escape'){
+        if(debugPinned&&!mOpen){debugPinned=null;hideDebugTooltip();e.preventDefault();return}
         if(mOpen){
             if(modalWirePouringState){exitModalWirePouring();e.preventDefault();return}
             if(modalDraggingWire){resetModalWiring();e.preventDefault();return}
@@ -889,6 +942,12 @@ document.addEventListener('keydown',e=>{
         if(fm&&fm.style.display==='flex'){closeFolderDialog(false);e.preventDefault();return}
     }
     const ctrl=e.ctrlKey||e.metaKey;
+    /* Debug toggle — plain 'D' (guarded against inputs and modifiers) */
+    if(!mOpen&&!ctrl&&!e.altKey&&(e.key==='d'||e.key==='D')
+       &&document.activeElement?.tagName!=='INPUT'
+       &&document.activeElement?.tagName!=='TEXTAREA'){
+        e.preventDefault();toggleDebugMode();return;
+    }
     if(mOpen){
         if(ctrl&&e.key==='c'){e.preventDefault();copyModalSelected();return}
         if(ctrl&&e.key==='v'){e.preventDefault();pasteModalAtCursor();return}
@@ -1237,6 +1296,10 @@ function onWireClick(e){
         selectedWireIds.add(wireId);
     }
     updateWireSelectionVisual();
+    if(debugMode){
+        if(debugPinned&&debugPinned.kind==='wire'&&debugPinned.id===wireId){debugPinned=null;hideDebugTooltip();}
+        else{debugPinned={kind:'wire',id:wireId,x:e.clientX,y:e.clientY};refreshPinnedTooltip();}
+    }
 }
 function onWireDblClick(e){
     e.stopPropagation();
@@ -1295,6 +1358,19 @@ function startDragGate(e,id){
     if(e.target.classList.contains('port'))return;
     if(e.target.classList.contains('pixel-resize-handle'))return;
     const comp=components.find(c=>c.id===id);if(!comp)return;
+    /* Debug mode: body-click toggles a pinned tooltip. Header drags are
+       unaffected — this branch only runs when the target is inside the
+       gate body (never the header). Shift+click still multi-selects. */
+    if(debugMode&&!e.shiftKey&&e.target.closest('.gate-body')){
+        const cx=e.clientX??(e.touches&&e.touches[0].clientX)??0;
+        const cy=e.clientY??(e.touches&&e.touches[0].clientY)??0;
+        if(debugPinned&&debugPinned.kind==='gate'&&debugPinned.id===id){debugPinned=null;hideDebugTooltip();}
+        else{debugPinned={kind:'gate',id,x:cx,y:cy};refreshPinnedTooltip();}
+        e.stopPropagation();e.preventDefault();return;
+    }
+    if(document.activeElement&&document.activeElement.tagName==='INPUT'&&document.activeElement!==e.target){
+        document.activeElement.blur();
+    }
     if(e.shiftKey){
         const el=document.getElementById(`comp-${id}`);
         if(selectedIds.has(id)){selectedIds.delete(id);if(el)el.classList.remove('selected')}
@@ -1414,9 +1490,14 @@ function evaluateCustomGate(comp){
                 else ins[i]=src.outputVal||0;
             }
             sc.inputs=ins;
-            if(sc.type==='CLOCK'||sc.type==='PULSE')continue;
+            /* CLOCK / PULSE / DELAY outputs are owned by the tick functions
+               (tickNestedClocksMain, tickNestedTiming). evaluateCustomGate
+               must not re-derive them — the delay queue pointer has already
+               been advanced by tickNestedTiming, so reading queue[ptr] here
+               would return the wrong slot and the delay would advance twice
+               per tick. */
+            if(sc.type==='CLOCK'||sc.type==='PULSE'||sc.type==='DELAY')continue;
             if(sc.isCustom)evaluateCustomGate(sc);
-            else if(sc.type==='DELAY'){const st=comp.delayStates&&comp.delayStates[sc.id];sc.outputVal=st?(st.queue[st.ptr]||0):0;}
             else sc.outputVal=evaluateGate(sc,ins);
             const oc=oldOut!==sc.outputVal;
             const ocs=sc.outputsArray&&(oldOutputs.length!==sc.outputsArray.length||oldOutputs.some((v,i)=>v!==sc.outputsArray[i]));
@@ -1713,6 +1794,11 @@ function updateVisuals(){
             }
         }
     }
+    if(debugMode){
+        refreshDebugOverlay();
+        if(debugPinned)refreshPinnedTooltip();
+        else if(debugMouseX||debugMouseY)updateDebugHover();
+    }
 }
 function updateModalVisuals(){
     for(let i=0;i<modalComponents.length;i++){
@@ -1806,6 +1892,178 @@ function updateModalPortPositions(){
     const els=document.querySelectorAll('#custom-gate-modal-canvas .port');const np={};
     for(let i=0;i<els.length;i++){const p=els[i];const k=`${p.getAttribute('data-comp')}-${p.getAttribute('data-type')}-${p.getAttribute('data-port')}`;const r=p.getBoundingClientRect();np[k]={x:(r.left+r.width/2-vpRect.left-modalPanX)/modalZoom,y:(r.top+r.height/2-vpRect.top-modalPanY)/modalZoom}}
     modalPortPositions=np;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DEBUG MODE  (overlay only — never affects circuit or simulation)
+   ═══════════════════════════════════════════════════════════════ */
+function ensureDebugTooltip(){
+    if(debugTooltipEl)return debugTooltipEl;
+    const el=document.createElement('div');
+    el.id='debug-tooltip';
+    document.body.appendChild(el);
+    debugTooltipEl=el;
+    return el;
+}
+function showDebugTooltip(x,y,html){
+    const el=ensureDebugTooltip();
+    if(html!==debugLastHtml){
+        el.innerHTML=html;
+        debugLastHtml=html;
+        el.style.left='0px';el.style.top='0px';
+        const r=el.getBoundingClientRect();
+        el._w=r.width;el._h=r.height;
+    }
+    el.classList.add('visible');
+    let nx=x+14,ny=y+14;
+    if(nx+(el._w||0)>window.innerWidth-8)nx=x-(el._w||0)-14;
+    if(ny+(el._h||0)>window.innerHeight-8)ny=y-(el._h||0)-14;
+    if(nx<4)nx=4;if(ny<4)ny=4;
+    el.style.left=nx+'px';el.style.top=ny+'px';
+}
+function hideDebugTooltip(){
+    if(!debugTooltipEl)return;
+    debugTooltipEl.classList.remove('visible');
+    debugLastHtml='';
+}
+function dbgLine(label,val){
+    const cls=val===1?'dbg-hi':(val===0?'dbg-lo':'');
+    return `<div class="dbg-line ${cls}">${escapeHtml(String(label))}: ${val}</div>`;
+}
+function buildGateDebugHtml(comp){
+    const lines=[];
+    if(comp.isCustom){
+        const ins=comp.inputs||[];const outs=comp.outputsArray||[];
+        for(let i=0;i<ins.length;i++)lines.push(dbgLine('IN '+i,ins[i]));
+        for(let i=0;i<outs.length;i++)lines.push(dbgLine('OUT '+i,outs[i]));
+        if(!comp.def)lines.push('<div class="dbg-err">⚠ missing definition</div>');
+    }else if(comp.type==='INPUT'||comp.type==='PUSH'){
+        lines.push(dbgLine('State',comp.state===1?1:0));
+        lines.push(dbgLine('Out',comp.outputVal===1?1:0));
+    }else if(comp.type==='OUTPUT'){
+        lines.push(dbgLine('In',(comp.inputs&&comp.inputs[0])===1?1:0));
+        lines.push(dbgLine('Bulb',comp.outputVal===1?1:0));
+    }else if(comp.type==='CLOCK'){
+        lines.push(dbgLine('Enable',(comp.inputs&&comp.inputs[0])===1?1:0));
+        lines.push(dbgLine('State',comp.state===1?1:0));
+        lines.push(`<div class="dbg-line">Counter: ${comp.clockCounter||0} / ${clockTicksFor(comp)}</div>`);
+        lines.push(`<div class="dbg-line">Period: ${comp.clockMs||250} ms</div>`);
+        lines.push(dbgLine('Out',comp.outputVal===1?1:0));
+    }else if(comp.type==='PULSE'){
+        lines.push(dbgLine('In',(comp.inputs&&comp.inputs[0])===1?1:0));
+        lines.push(dbgLine('Prev',comp.pulsePrevInput===1?1:0));
+        lines.push(`<div class="dbg-line">Counter: ${comp.pulseCounter||0}</div>`);
+        lines.push(dbgLine('State',comp.state===1?1:0));
+        lines.push(dbgLine('Out',comp.outputVal===1?1:0));
+    }else if(comp.type==='DELAY'){
+        lines.push(dbgLine('In',(comp.inputs&&comp.inputs[0])===1?1:0));
+        lines.push(dbgLine('Out',comp.outputVal===1?1:0));
+        lines.push(`<div class="dbg-line">Delay: ${comp.delayMs||150} ms (${delayTicksFor(comp)} ticks)</div>`);
+    }else if(comp.type==='SCREEN'){
+        lines.push(dbgLine('In',(comp.inputs&&comp.inputs[0])===1?1:0));
+        lines.push(`<div class="dbg-line">Size: ${comp.pixelWidth||40}×${comp.pixelHeight||40}</div>`);
+    }else if(comp.type==='COLOR'){
+        lines.push(dbgLine('In',(comp.inputs&&comp.inputs[0])===1?1:0));
+        lines.push(dbgLine('Out',comp.outputVal===1?1:0));
+        lines.push(`<div class="dbg-line">Color: ${comp.pixelColor||'#39ff14'}</div>`);
+    }else{
+        const names=['A','B','C','D'];const ins=comp.inputs||[];
+        for(let i=0;i<ins.length;i++)lines.push(dbgLine(names[i]||('IN'+i),ins[i]===1?1:0));
+        lines.push(dbgLine('Out',comp.outputVal===1?1:0));
+    }
+    const lbl=(comp.customLabel||'').trim();
+    const title=lbl?`${comp.type} "${lbl}"`:comp.type;
+    const hint=debugPinned?'<div class="dbg-pin-hint">pinned • Esc to unpin</div>':'<div class="dbg-pin-hint">click body to pin</div>';
+    return `<div class="dbg-title">${escapeHtml(title)}</div>${lines.join('')}${hint}`;
+}
+function buildWireDebugHtml(w){
+    const src=components.find(c=>c.id===w.fromComp);
+    const dst=components.find(c=>c.id===w.toComp);
+    const lines=[];
+    let val=0;
+    if(src){
+        if(src.isCustom)val=((src.outputsArray||[])[w.fromPort])===1?1:0;
+        else val=src.outputVal===1?1:0;
+    }
+    if(!src)lines.push(`<div class="dbg-err">⚠ source missing (#${w.fromComp})</div>`);
+    if(!dst)lines.push(`<div class="dbg-err">⚠ destination missing (#${w.toComp})</div>`);
+    lines.push(dbgLine('Signal',val));
+    lines.push(`<div class="dbg-line">From: ${src?escapeHtml(src.type):'?'} #${w.fromComp} out[${w.fromPort}]</div>`);
+    lines.push(`<div class="dbg-line">To: ${dst?escapeHtml(dst.type):'?'} #${w.toComp} in[${w.toPort}]</div>`);
+    const hint=debugPinned?'<div class="dbg-pin-hint">pinned • Esc to unpin</div>':'<div class="dbg-pin-hint">click to pin</div>';
+    return `<div class="dbg-title">Wire #${w.id}</div>${lines.join('')}${hint}`;
+}
+function refreshPinnedTooltip(){
+    if(!debugMode)return;
+    /* Do not touch the tooltip when nothing is pinned — otherwise the
+       simulation tick would hide the hover tooltip every 50 ms. */
+    if(!debugPinned)return;
+    if(debugPinned.kind==='gate'){
+        const c=components.find(x=>x.id===debugPinned.id);
+        if(!c){debugPinned=null;hideDebugTooltip();return;}
+        showDebugTooltip(debugPinned.x,debugPinned.y,buildGateDebugHtml(c));
+    }else{
+        const w=wires.find(x=>x.id===debugPinned.id);
+        if(!w){debugPinned=null;hideDebugTooltip();return;}
+        showDebugTooltip(debugPinned.x,debugPinned.y,buildWireDebugHtml(w));
+    }
+}
+function refreshDebugOverlay(){
+    if(!debugMode)return;
+    const connected=new Set();
+    for(const w of wires)connected.add(w.toComp+':'+w.toPort);
+    for(const comp of components){
+        const pc=compPortEls.get(comp.id);
+        const el=compEls.get(comp.id);
+        if(!el)continue;
+        if(comp.isCustom&&!comp.def)el.classList.add('debug-broken');
+        else el.classList.remove('debug-broken');
+        if(!pc)continue;
+        if(comp.type==='SCREEN')continue;   /* pixel port is hover-only; skip */
+        for(let i=0;i<pc.in.length;i++){
+            const p=pc.in[i];if(!p)continue;
+            p.classList.toggle('debug-unconnected',!connected.has(comp.id+':'+i));
+        }
+    }
+}
+function setDebugMode(on){
+    debugMode=!!on;
+    document.body.classList.toggle('debug-mode',debugMode);
+    const btn=document.getElementById('debug-btn');
+    if(btn){
+        btn.textContent=debugMode?'🐞 Debug ON':'🐞 Debug';
+        btn.style.background=debugMode?'#16a34a':'#7c3aed';
+    }
+    if(!debugMode){
+        debugPinned=null;
+        hideDebugTooltip();
+        /* Clear any lingering debug class so switching off is clean even
+           if CSS rules are later changed. */
+        document.querySelectorAll('.port.debug-unconnected').forEach(p=>p.classList.remove('debug-unconnected'));
+        document.querySelectorAll('.gate.debug-broken').forEach(g=>g.classList.remove('debug-broken'));
+    }else{
+        refreshDebugOverlay();
+        showToast('🐞 Debug mode ON — hover gates/wires, click body to pin.','info',2500);
+    }
+    try{localStorage.setItem('debug_mode',debugMode?'1':'0')}catch(_){}
+}
+function toggleDebugMode(){setDebugMode(!debugMode)}
+function updateDebugHover(){
+    if(!debugMode||debugPinned)return;
+    const el=document.elementFromPoint(debugMouseX,debugMouseY);
+    if(!el){hideDebugTooltip();return;}
+    const gate=el.closest?el.closest('.gate'):null;
+    if(gate&&gate.id.startsWith('comp-')){
+        const id=parseInt(gate.id.slice(5));
+        const comp=components.find(c=>c.id===id);
+        if(comp){showDebugTooltip(debugMouseX,debugMouseY,buildGateDebugHtml(comp));return;}
+    }
+    if(el.classList&&el.classList.contains('wire-path')){
+        const wid=parseInt(el.dataset.wireId);
+        const w=wires.find(x=>x.id===wid);
+        if(w){showDebugTooltip(debugMouseX,debugMouseY,buildWireDebugHtml(w));return;}
+    }
+    hideDebugTooltip();
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -2033,7 +2291,8 @@ async function exportCircuit(){
     const state=buildFullState();const json=JSON.stringify(state,null,2);
     const blob=new Blob([json],{type:'application/json'});const url=URL.createObjectURL(blob);
     const fn=await showPrompt('Export Circuit','Enter filename (without extension):',`logic_gate_simulator_${new Date().toISOString().slice(0,10)}`);
-    const finalName=fn?`${fn.trim()}.json`:`logic_gate_simulator_${new Date().toISOString().slice(0,10)}.json`;
+    if(fn===null)return;                     /* cancelled — do nothing */
+    const finalName=fn&&fn.trim()?`${fn.trim()}.json`:`logic_gate_simulator_${new Date().toISOString().slice(0,10)}.json`;
     const a=document.createElement('a');a.href=url;a.download=finalName;a.click();URL.revokeObjectURL(url);
     showToast('Circuit exported!','success');
 }
@@ -2804,6 +3063,9 @@ function startDragModalGate(e,id){
     if(e.target.tagName==='INPUT'||e.target.type==='color')return;
     if(e.target.classList.contains('port'))return;
     const comp=modalComponents.find(c=>c.id===id);if(!comp)return;
+    if(document.activeElement&&document.activeElement.tagName==='INPUT'&&document.activeElement!==e.target){
+        document.activeElement.blur();
+    }
     if(e.shiftKey){
         const el=document.getElementById(`modal-comp-${id}`);
         if(modalSelectedIds.has(id)){modalSelectedIds.delete(id);if(el)el.classList.remove('selected')}
@@ -3047,6 +3309,8 @@ window.closeFolderDialogOutside=closeFolderDialogOutside;
 window.createNewFolder=createNewFolder;
 window.editFolder=editFolder;
 window.moveGateToFolder=moveGateToFolder;
+window.toggleDebugMode=toggleDebugMode;
+window.setDebugMode=setDebugMode;
 
 /* init */
 window.addEventListener('load',()=>{
@@ -3059,6 +3323,8 @@ window.addEventListener('load',()=>{
     undoStack.push(_snap());
     updateUndoRedoButtons();resetSelectionSourceIndex();
     if(localStorage.getItem('instructions_hidden')==='true'){const b=document.getElementById('instructions-box');if(b)b.classList.add('hidden')}
+    /* Restore debug mode preference (viewer state only, not part of circuit) */
+    if(localStorage.getItem('debug_mode')==='1')setDebugMode(true);else setDebugMode(false);
     console.log('✅ Logic Sim loaded.');
 });
 </script>
